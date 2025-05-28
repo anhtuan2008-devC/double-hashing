@@ -46,9 +46,10 @@ cmake --build .
 cd Double Hashing Experiment
 cd Debug
 .\CMakeTarget     # hoặc .\CMakeTarget.exe trên Windows
-
+```
 ## Tác giả
 
-Nhóm 9
-Lớp 24CTT2A
-Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM
+- Nhóm 9
+- Lớp 24CTT2A
+- Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM
+```
