@@ -9,6 +9,7 @@
 
 ## Cấu trúc thư mục
 
+```
 Double Hashing Experiment/
 │
 ├── CMakeLists.txt # File cấu hình CMake cho thư mục này
@@ -18,7 +19,8 @@ out/ # Thư mục build output
 │ └── build
 │
 CMakeLists.txt # File cấu hình CMake cho toàn project
-CMakePresets.json # File preset cho CMake (tuỳ chọn)
+CMakePresets.json # File preset cho CMake
+```
 
 
 ## Hướng dẫn build & chạy
@@ -45,5 +47,5 @@ cd Double Hashing Experiment
 cd Debug
 ./CMakeTarget     # hoặc .\CMakeTarget.exe trên Windows
 
-Tác giả
+**Tác giả**
 Nhóm 9 - Lớp 24CTT2A
