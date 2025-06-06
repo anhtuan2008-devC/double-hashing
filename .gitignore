@@ -1,0 +1,20 @@
+# Build
+/build/
+*.o
+*.obj
+*.exe
+*.out
+
+# IDE
+.vscode/
+*.suo
+*.user
+*.ncb
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test binaries
+run_tests
