@@ -48,4 +48,3 @@ double-hashing.exe
 - Nhóm 9
 - Lớp 24CTT2A
 - Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM
-```
