@@ -5,12 +5,12 @@
 ## Mục tiêu
 
 - Hiểu và thực hành kỹ thuật Double Hashing để giải quyết vấn đề va chạm (collision) trong Hash Table.
-- So sánh hiệu quả của Double Hashing với các phương pháp khác (nếu có mở rộng).
+- So sánh hiệu quả của Double Hashing với các phương pháp khác.
 
 ## Cấu trúc thư mục
 
 ```
-Double Hashing Experiment/
+double-hashing/
 ├── src/
 │   ├── CMakeLists.txt       # Cấu hình CMake cho thư mục src 
 │   └── main.cpp             # File mã nguồn chính
@@ -48,4 +48,3 @@ double-hashing.exe
 - Nhóm 9
 - Lớp 24CTT2A
 - Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM
-```
