@@ -10,7 +10,7 @@
 ## Cấu trúc thư mục
 
 ```
-Double Hashing Experiment/
+double-hashing/
 ├── src/
 │   ├── CMakeLists.txt       # Cấu hình CMake cho thư mục src 
 │   └── main.cpp             # File mã nguồn chính
