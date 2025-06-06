@@ -32,20 +32,19 @@ CMakePresets.json # File preset cho CMake
 **Các bước:**
 
 ```sh
-# Tạo thư mục build nếu chưa có
-mkdir out/build
-cd out/build
+:: Bước 1: Tạo thư mục build
+mkdir build
+cd build
 
-# Tạo file build với CMake
-cmake ../..
+:: Bước 2: Cấu hình project bằng CMake
+cmake ..    :: hoặc cmake .. -G "Visual Studio 17 2022" nếu cần chỉ định cụ thể
 
-# Biên dịch
-cmake --build .
+:: Bước 3: Biên dịch với cấu hình Debug
+cmake --build . --config Debug
 
-# Chạy chương trình
-cd Double Hashing Experiment
-cd Debug
-.\CMakeTarget     # hoặc .\CMakeTarget.exe trên Windows
+:: Bước 4: Chạy chương trình (file .exe nằm trong thư mục src\Debug)
+cd src\Debug
+double-hashing.exe
 ```
 ## Tác giả
 
