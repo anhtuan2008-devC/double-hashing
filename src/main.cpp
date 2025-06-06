@@ -379,26 +379,46 @@ public:
 
 // Hàm tính thời gian thực hiện các thao tác trên bảng băm
 template <typename Table>
-StatResult testTable(Table& table, const std::vector<std::pair<int, int>>& keyvals, const std::vector<int>& search_indices, const std::vector<int>& delete_indices) {
+StatResult testTable(
+    Table& table,
+    const std::vector<std::pair<int, int>>& keyvals,
+    const std::vector<int>& search_indices,
+    const std::vector<int>& delete_indices) 
+{
+    constexpr int NUM_RUNS = 10;
     StatResult res;
-    auto t1 = std::chrono::steady_clock::now();
-    // insert
-    for (auto& kv : keyvals) table.insert(kv.first, kv.second);
-    auto t2 = std::chrono::steady_clock::now();
-    // search
-    int tmp;
-    for (int idx : search_indices) {
-        table.search(keyvals[idx].first, tmp); // cần 1 biến value out
+    long long totalInsertTime = 0, totalSearchTime = 0, totalDeleteTime = 0;
+
+    bool capturedStats = false;
+
+    for (int run = 0; run < NUM_RUNS; ++run) {
+        Table tempTable(table); // clone để tránh sửa bảng gốc
+
+        auto t1 = std::chrono::high_resolution_clock::now();
+        for (auto& kv : keyvals) tempTable.insert(kv.first, kv.second);
+        auto t2 = std::chrono::high_resolution_clock::now();
+
+        int tmp;
+        for (int idx : search_indices) tempTable.search(keyvals[idx].first, tmp);
+        auto t3 = std::chrono::high_resolution_clock::now();
+
+        for (int idx : delete_indices) tempTable.erase(keyvals[idx].first);
+        auto t4 = std::chrono::high_resolution_clock::now();
+
+        totalInsertTime += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        totalSearchTime += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
+        totalDeleteTime += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
+
+        // 👉 Ghi lại thống kê từ tempTable.stats vào bảng gốc (chỉ 1 lần duy nhất)
+        if (!capturedStats) {
+            table.stats = tempTable.stats;
+            capturedStats = true;
+        }
     }
-    auto t3 = std::chrono::steady_clock::now();
-    // delete
-    for (int idx : delete_indices) {
-        table.erase(keyvals[idx].first);
-    }
-    auto t4 = std::chrono::steady_clock::now();
-    res.insertTime = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    res.searchTime = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
-    res.deleteTime = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
+
+    res.insertTime = totalInsertTime / NUM_RUNS;
+    res.searchTime = totalSearchTime / NUM_RUNS;
+    res.deleteTime = totalDeleteTime / NUM_RUNS;
     return res;
 }
 
