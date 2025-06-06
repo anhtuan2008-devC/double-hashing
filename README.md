@@ -11,17 +11,14 @@
 
 ```
 Double Hashing Experiment/
-│
-├── CMakeLists.txt # File cấu hình CMake cho thư mục này
-├── main.cpp # File mã nguồn chính
-│
-out/ # Thư mục build output 
-│ └── build
-│
-CMakeLists.txt # File cấu hình CMake cho toàn project
-CMakePresets.json # File preset cho CMake
+├── src/
+│   ├── CMakeLists.txt       # Cấu hình CMake cho thư mục src 
+│   └── main.cpp             # File mã nguồn chính
+├── .gitignore               # Danh sách file/thư mục bỏ qua khi commit
+├── CMakeLists.txt           # File cấu hình CMake cho toàn project
+├── LICENSE                  # Thông tin bản quyền
+└── README.md                # Tài liệu mô tả, hướng dẫn dự án
 ```
-
 
 ## Hướng dẫn build & chạy
 
@@ -32,17 +29,17 @@ CMakePresets.json # File preset cho CMake
 **Các bước:**
 
 ```sh
-:: Bước 1: Tạo thư mục build
+ #Bước 1: Tạo thư mục build
 mkdir build
 cd build
 
-:: Bước 2: Cấu hình project bằng CMake
-cmake ..    :: hoặc cmake .. -G "Visual Studio 17 2022" nếu cần chỉ định cụ thể
+ #Bước 2: Cấu hình project bằng CMake
+cmake ..  hoặc cmake .. -G "Visual Studio 17 2022" nếu cần chỉ định cụ thể
 
-:: Bước 3: Biên dịch với cấu hình Debug
+ #Bước 3: Biên dịch với cấu hình Debug
 cmake --build . --config Debug
 
-:: Bước 4: Chạy chương trình (file .exe nằm trong thư mục src\Debug)
+ #Bước 4: Chạy chương trình (file .exe nằm trong thư mục src\Debug)
 cd src\Debug
 double-hashing.exe
 ```
