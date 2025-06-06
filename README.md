@@ -5,7 +5,7 @@
 ## Mục tiêu
 
 - Hiểu và thực hành kỹ thuật Double Hashing để giải quyết vấn đề va chạm (collision) trong Hash Table.
-- So sánh hiệu quả của Double Hashing với các phương pháp khác (nếu có mở rộng).
+- So sánh hiệu quả của Double Hashing với các phương pháp khác.
 
 ## Cấu trúc thư mục
 
