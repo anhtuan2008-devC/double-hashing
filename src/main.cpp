@@ -28,6 +28,9 @@ struct StatResult {
     long long insertTime;
     long long searchTime;
     long long deleteTime;
+    double avgProbeSearchHit;
+    double avgProbeSearchMiss;
+    double avgProbeInsertAfterDelete;
 };
 
 struct HashStats {
@@ -51,6 +54,12 @@ void printTableSizes(double lf1, double lf2, int N1, int N2);
 int getNumOps(const std::string& opName, int maxVal);
 std::vector<std::pair<int, int>> generateUniqueKeyVals(int M, int N1, int N2);
 std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_search, int num_delete);
+template<typename DHTable, typename LTable, typename QTable>
+void insertAndPrintClusterStats(
+    const DHTable&, const LTable&, const QTable&,
+    const std::vector<std::pair<int, int>>&,
+    const std::string& label
+);
 
 // Hàm kiểm tra số nguyên tố
 bool isPrime(int n) {
@@ -199,6 +208,41 @@ public:
             firstItr = false;
         }
     }
+
+    int maxClusterLength() const {
+        int maxLen = 0, curLen = 0;
+        for (const auto& entry : hashTable) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+                maxLen = std::max(maxLen, curLen);
+            } else {
+                curLen = 0;
+            }
+        }
+        return maxLen;
+    }
+
+    double avgClusterLength() const {
+        int totalClusters = 0, totalLen = 0, curLen = 0;
+        for (const auto& entry : hashTable) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+            } else {
+                if (curLen > 0) {
+                    ++totalClusters;
+                    totalLen += curLen;
+                    curLen = 0;
+                }
+            }
+        }
+        // Nếu bảng kết thúc bằng một cluster
+        if (curLen > 0) {
+            ++totalClusters;
+            totalLen += curLen;
+        }
+        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
+    }
+
 };
 
 // ======= Linear Probing Table =======
@@ -281,6 +325,40 @@ public:
         }
         stats.totalProbesDelete += probes;
         stats.nDelete++;
+    }
+
+        int maxClusterLength() const {
+        int maxLen = 0, curLen = 0;
+        for (const auto& entry : hashTable) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+                maxLen = std::max(maxLen, curLen);
+            } else {
+                curLen = 0;
+            }
+        }
+        return maxLen;
+    }
+
+    double avgClusterLength() const {
+        int totalClusters = 0, totalLen = 0, curLen = 0;
+        for (const auto& entry : hashTable) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+            } else {
+                if (curLen > 0) {
+                    ++totalClusters;
+                    totalLen += curLen;
+                    curLen = 0;
+                }
+            }
+        }
+        // Nếu bảng kết thúc bằng một cluster
+        if (curLen > 0) {
+            ++totalClusters;
+            totalLen += curLen;
+        }
+        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
     }
 };
 
@@ -375,91 +453,236 @@ public:
         stats.totalProbesDelete += probes;
         stats.nDelete++;
     }
+
+    int maxClusterLength() const {
+        int maxLen = 0, curLen = 0;
+        for (const auto& entry : hashTable) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+                maxLen = std::max(maxLen, curLen);
+            } else {
+                curLen = 0;
+            }
+        }
+        return maxLen;
+    }
+
+    double avgClusterLength() const {
+        int totalClusters = 0, totalLen = 0, curLen = 0;
+        for (const auto& entry : hashTable) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+            } else {
+                if (curLen > 0) {
+                    ++totalClusters;
+                    totalLen += curLen;
+                    curLen = 0;
+                }
+            }
+        }
+        // Nếu bảng kết thúc bằng một cluster
+        if (curLen > 0) {
+            ++totalClusters;
+            totalLen += curLen;
+        }
+        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
+    }
 };
+
+template<typename DHTable, typename LTable, typename QTable>
+void insertAndPrintClusterStats(
+    const DHTable& dht, const LTable& lpt, const QTable& qpt,
+    const std::vector<std::pair<int, int>>& keyvals,
+    const std::string& label = ""
+) {
+    DHTable dht_copy = dht;
+    LTable lpt_copy = lpt;
+    QTable qpt_copy = qpt;
+    for (auto& kv : keyvals) {
+        dht_copy.insert(kv.first, kv.second);
+        lpt_copy.insert(kv.first, kv.second);
+        qpt_copy.insert(kv.first, kv.second);
+    }
+    std::cout << "\n===== CLUSTER LENGTH STATISTICS" << (label.empty() ? "" : (" - " + label)) << " =====\n";
+    std::cout << std::setw(32) << std::left << " "
+        << std::setw(20) << "Double Hashing"
+        << std::setw(20) << "Linear Probing"
+        << std::setw(20) << "Quadratic Probing" << '\n';
+    std::cout << std::setw(32) << std::left << "[Max cluster length]:"
+        << std::setw(20) << dht_copy.maxClusterLength()
+        << std::setw(20) << lpt_copy.maxClusterLength()
+        << std::setw(20) << qpt_copy.maxClusterLength() << '\n';
+    std::cout << std::setw(32) << std::left << "[Avg cluster length]:"
+        << std::setw(20) << dht_copy.avgClusterLength()
+        << std::setw(20) << lpt_copy.avgClusterLength()
+        << std::setw(20) << qpt_copy.avgClusterLength() << '\n';
+}
 
 // Hàm tính thời gian thực hiện các thao tác trên bảng băm
 template <typename Table>
 StatResult testTable(
     Table& table,
     const std::vector<std::pair<int, int>>& keyvals,
-    const std::vector<int>& search_indices,
-    const std::vector<int>& delete_indices) 
-{
+    const std::vector<int>& search_hit_indices,
+    const std::vector<int>& search_miss_keys,
+    const std::vector<int>& delete_indices
+) {
     constexpr int NUM_RUNS = 10;
     StatResult res;
-    long long totalInsertTime = 0, totalSearchTime = 0, totalDeleteTime = 0;
+    long long totalInsertTime = 0, totalSearchHitTime = 0, totalSearchMissTime = 0, totalDeleteTime = 0;
 
-    bool capturedStats = false;
+    // Thống kê probe cho từng loại search
+    long long totalProbeSearchHit = 0, totalProbeSearchMiss = 0;
+    long long totalProbeInsertAfterDelete = 0;
+    int nInsertAfterDelete = 0;
 
     for (int run = 0; run < NUM_RUNS; ++run) {
-        Table tempTable(table); // clone để tránh sửa bảng gốc
+        Table tempTable(table); // clone
 
+        // Insert all keyvals
         auto t1 = std::chrono::high_resolution_clock::now();
-        for (auto& kv : keyvals) tempTable.insert(kv.first, kv.second);
+        for (auto& kv : keyvals)
+            tempTable.insert(kv.first, kv.second);
         auto t2 = std::chrono::high_resolution_clock::now();
 
+        // Search HIT (tồn tại)
         int tmp;
-        for (int idx : search_indices) tempTable.search(keyvals[idx].first, tmp);
         auto t3 = std::chrono::high_resolution_clock::now();
-
-        for (int idx : delete_indices) tempTable.erase(keyvals[idx].first);
+        for (int idx : search_hit_indices) {
+            int probes_before = tempTable.stats.totalProbesSearch;
+            tempTable.search(keyvals[idx].first, tmp);
+            totalProbeSearchHit += tempTable.stats.totalProbesSearch - probes_before;
+        }
         auto t4 = std::chrono::high_resolution_clock::now();
 
-        totalInsertTime += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-        totalSearchTime += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
-        totalDeleteTime += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
-
-        // 👉 Ghi lại thống kê từ tempTable.stats vào bảng gốc (chỉ 1 lần duy nhất)
-        if (!capturedStats) {
-            table.stats = tempTable.stats;
-            capturedStats = true;
+        // Search MISS (không tồn tại)
+        auto t5 = std::chrono::high_resolution_clock::now();
+        for (int key : search_miss_keys) {
+            int probes_before = tempTable.stats.totalProbesSearch;
+            tempTable.search(key, tmp);
+            totalProbeSearchMiss += tempTable.stats.totalProbesSearch - probes_before;
         }
+        auto t6 = std::chrono::high_resolution_clock::now();
+
+        // Delete các key
+        auto t7 = std::chrono::high_resolution_clock::now();
+        for (int idx : delete_indices)
+            tempTable.erase(keyvals[idx].first);
+        auto t8 = std::chrono::high_resolution_clock::now();
+
+        // Insert lại các key vừa xóa (giá trị mới random)
+        auto t9 = std::chrono::high_resolution_clock::now();
+        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::uniform_int_distribution<int> dist_val(1, 1000000);
+        for (int idx : delete_indices) {
+            int probes_before = tempTable.stats.totalProbesInsert;
+            tempTable.insert(keyvals[idx].first, dist_val(rng));
+            totalProbeInsertAfterDelete += tempTable.stats.totalProbesInsert - probes_before;
+            nInsertAfterDelete++;
+        }
+        auto t10 = std::chrono::high_resolution_clock::now();
+
+        // Tính thời gian từng phần (chia nhỏ rõ ràng)
+        totalInsertTime      += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        totalSearchHitTime   += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
+        totalSearchMissTime  += std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5).count();
+        totalDeleteTime      += std::chrono::duration_cast<std::chrono::microseconds>(t8 - t7).count();
+
+        // Ghi lại stats (1 lần duy nhất)
+        if (run == 0)
+            table.stats = tempTable.stats;
     }
 
-    res.insertTime = totalInsertTime / NUM_RUNS;
-    res.searchTime = totalSearchTime / NUM_RUNS;
-    res.deleteTime = totalDeleteTime / NUM_RUNS;
+    int nHit = search_hit_indices.size() * NUM_RUNS;
+    int nMiss = search_miss_keys.size() * NUM_RUNS;
+
+    res.insertTime       = totalInsertTime      / NUM_RUNS;
+    res.searchTime       = (totalSearchHitTime + totalSearchMissTime) / NUM_RUNS;
+    res.deleteTime       = totalDeleteTime      / NUM_RUNS;
+    res.avgProbeSearchHit  = (nHit   ? 1.0 * totalProbeSearchHit / nHit : 0);
+    res.avgProbeSearchMiss = (nMiss  ? 1.0 * totalProbeSearchMiss / nMiss : 0);
+    res.avgProbeInsertAfterDelete = (nInsertAfterDelete ? 1.0 * totalProbeInsertAfterDelete / nInsertAfterDelete : 0);
+
     return res;
 }
 
 // Hàm in bảng thống kê tổng hợp thời gian thực hiện các thao tác
-void printSummaryTable(double lf1, double lf2, StatResult dht1, StatResult dht2, StatResult lpt1, StatResult lpt2, StatResult qpt1, StatResult qpt2) {
+void printSummaryTable(
+    double lf1, double lf2,
+    StatResult dht1, StatResult dht2,
+    StatResult lpt1, StatResult lpt2,
+    StatResult qpt1, StatResult qpt2
+) {
     std::cout << "\n===== TABLE OF PERFORMANCE COMPARISON (us) =====\n";
-    std::cout << std::setw(30) << std::left << " "
+    std::cout << std::setw(50) << std::left << " "
         << std::setw(20) << "Double Hashing"
         << std::setw(20) << "Linear Probing"
         << std::setw(20) << "Quadratic Probing" << '\n';
 
-    std::cout << std::setw(30) << std::left << ("[Insert] LF1 (" + doubleToStr(lf1, 2) + "):")
+    // Thời gian thực hiện các thao tác
+    std::cout << std::setw(50) << std::left << ("[Insert Time] LF1 (" + doubleToStr(lf1, 2) + "):")
         << std::setw(20) << dht1.insertTime
         << std::setw(20) << lpt1.insertTime
         << std::setw(20) << qpt1.insertTime << '\n';
 
-    std::cout << std::setw(30) << std::left << ("[Insert] LF2 (" + doubleToStr(lf2, 2) + "):")
+    std::cout << std::setw(50) << std::left << ("[Insert Time] LF2 (" + doubleToStr(lf2, 2) + "):")
         << std::setw(20) << dht2.insertTime
         << std::setw(20) << lpt2.insertTime
         << std::setw(20) << qpt2.insertTime << '\n';
 
-    std::cout << std::setw(30) << std::left << ("[Search] LF1 (" + doubleToStr(lf1, 2) + "):")
+    std::cout << std::setw(50) << std::left << ("[Search Time] LF1 (" + doubleToStr(lf1, 2) + "):")
         << std::setw(20) << dht1.searchTime
         << std::setw(20) << lpt1.searchTime
         << std::setw(20) << qpt1.searchTime << '\n';
 
-    std::cout << std::setw(30) << std::left << ("[Search] LF2 (" + doubleToStr(lf2, 2) + "):")
+    std::cout << std::setw(50) << std::left << ("[Search Time] LF2 (" + doubleToStr(lf2, 2) + "):")
         << std::setw(20) << dht2.searchTime
         << std::setw(20) << lpt2.searchTime
         << std::setw(20) << qpt2.searchTime << '\n';
 
-    std::cout << std::setw(30) << std::left << ("[Delete] LF1 (" + doubleToStr(lf1, 2) + "):")
+    std::cout << std::setw(50) << std::left << ("[Delete Time] LF1 (" + doubleToStr(lf1, 2) + "):")
         << std::setw(20) << dht1.deleteTime
         << std::setw(20) << lpt1.deleteTime
         << std::setw(20) << qpt1.deleteTime << '\n';
 
-    std::cout << std::setw(30) << std::left << ("[Delete] LF2 (" + doubleToStr(lf2, 2) + "):")
+    std::cout << std::setw(50) << std::left << ("[Delete Time] LF2 (" + doubleToStr(lf2, 2) + "):")
         << std::setw(20) << dht2.deleteTime
         << std::setw(20) << lpt2.deleteTime
         << std::setw(20) << qpt2.deleteTime << '\n';
+
+    // In probe search hit/miss/insert after delete 
+    std::cout << "\n----- PROBE STATISTICS (Average probes per operation) -----\n";
+    std::cout << std::setw(50) << std::left << "[Avg probe/search HIT] LF1:"
+        << std::setw(20) << dht1.avgProbeSearchHit
+        << std::setw(20) << lpt1.avgProbeSearchHit
+        << std::setw(20) << qpt1.avgProbeSearchHit << '\n';
+
+    std::cout << std::setw(50) << std::left << "[Avg probe/search MISS] LF1:"
+        << std::setw(20) << dht1.avgProbeSearchMiss
+        << std::setw(20) << lpt1.avgProbeSearchMiss
+        << std::setw(20) << qpt1.avgProbeSearchMiss << '\n';
+
+    std::cout << std::setw(50) << std::left << "[Avg probe/insert-after-delete] LF1:"
+        << std::setw(20) << dht1.avgProbeInsertAfterDelete
+        << std::setw(20) << lpt1.avgProbeInsertAfterDelete
+        << std::setw(20) << qpt1.avgProbeInsertAfterDelete << '\n';
+
+    std::cout << std::setw(50) << std::left << "[Avg probe/search HIT] LF2:"
+        << std::setw(20) << dht2.avgProbeSearchHit
+        << std::setw(20) << lpt2.avgProbeSearchHit
+        << std::setw(20) << qpt2.avgProbeSearchHit << '\n';
+
+    std::cout << std::setw(50) << std::left << "[Avg probe/search MISS] LF2:"
+        << std::setw(20) << dht2.avgProbeSearchMiss
+        << std::setw(20) << lpt2.avgProbeSearchMiss
+        << std::setw(20) << qpt2.avgProbeSearchMiss << '\n';
+
+    std::cout << std::setw(50) << std::left << "[Avg probe/insert-after-delete] LF2:"
+        << std::setw(20) << dht2.avgProbeInsertAfterDelete
+        << std::setw(20) << lpt2.avgProbeInsertAfterDelete
+        << std::setw(20) << qpt2.avgProbeInsertAfterDelete << '\n';
 }
+
 // Hàm in bảng thống kê chi tiết về số lần probe, số lần va chạm và tỷ lệ va chạm
 template <typename Table>
 void printDetailStats(const std::string& algoName, double lf, Table& table) {
@@ -533,6 +756,50 @@ int getNumOps(const std::string& opName, int maxVal) {
     return num;
 }
 
+// Hàm sinh search hit/miss indices với num_search mặc định = M, miss_rate nhập từ user
+std::pair<std::vector<int>, std::vector<int>> generateSearchHitMissIndices(
+    int M,
+    const std::vector<int>& all_indices,
+    const std::vector<std::pair<int, int>>& keyvals,
+    int key_upper_bound 
+) {
+    int num_search = M;
+    double miss_rate = -1;
+    while (miss_rate < 0 || miss_rate > 1) {
+        std::cout << "Enter the miss rate (0-1) for search operations: ";
+        std::cin >> miss_rate;
+        if (miss_rate < 0 || miss_rate > 1) {
+            std::cout << "Invalid rate! Please enter a value between 0 and 1.\n";
+        }
+    }
+
+    int num_miss = int(num_search * miss_rate + 0.5);
+    int num_hit = num_search - num_miss;
+
+    std::vector<int> hit_indices, miss_keys;
+
+    std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::uniform_int_distribution<int> dist_key(1, key_upper_bound);
+
+    // Chọn ngẫu nhiên num_hit chỉ số trong all_indices (truy cập key hợp lệ)
+    std::vector<int> indices = all_indices;
+    std::shuffle(indices.begin(), indices.end(), rng);
+    hit_indices.assign(indices.begin(), indices.begin() + num_hit);
+
+    // Lấy tập key đã tồn tại để sinh miss key không trùng
+    std::unordered_set<int> exist_keys;
+    for (const auto& kv : keyvals) exist_keys.insert(kv.first);
+
+    while ((int)miss_keys.size() < num_miss) {
+        int key = dist_key(rng);
+        if (exist_keys.count(key)) continue; // Đảm bảo miss
+        miss_keys.push_back(key);
+        exist_keys.insert(key); // Tránh trùng lặp miss
+    }
+
+    return {hit_indices, miss_keys};
+}
+
 std::vector<std::pair<int, int>> generateUniqueKeyVals(int M, int N1, int N2) {
     std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
     std::uniform_int_distribution<int> dist_key(1, std::max(N1, N2) * 10);
@@ -568,35 +835,55 @@ std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_sea
 int main(void) {
     system("color F0");
 
+    // Bước 1: Đầu vào kích thước, load factor
     int M = getTestSize();
     double lf1 = getUserLoadFactor();
-    double lf2 = 0.5; // Tối ưu mặc định
+    double lf2 = 0.5; // Tự động chọn LF2 là 0.5
 
     int N1 = nextPrime(int(M / lf1));
     int N2 = nextPrime(int(M / lf2));
 
     printTableSizes(lf1, lf2, N1, N2);
 
-    int num_search = getNumOps("searches", M);
-    int num_delete = getNumOps("deletes", M);
-
+    // Bước 2: Sinh key-value ngẫu nhiên
     auto keyvals = generateUniqueKeyVals(M, N1, N2);
-    auto [search_indices, delete_indices] = generateIndices(M, num_search, num_delete);
 
-    // Tạo bảng băm
+    // Sinh all_indices cho truy cập các phần tử trong keyvals
+    std::vector<int> all_indices(M);
+    std::iota(all_indices.begin(), all_indices.end(), 0);
+
+    // Bước 3: Sinh search hit/miss theo % miss nhập từ user
+    auto [search_hit_indices, search_miss_keys] = generateSearchHitMissIndices(
+        M, all_indices, keyvals, std::max(N1, N2) * 10
+    );
+    int num_search = search_hit_indices.size() + search_miss_keys.size();
+    std::cout << "Total searches: " << num_search
+              << " (" << search_hit_indices.size() << " hit, "
+              << search_miss_keys.size() << " miss)\n";
+
+    // Bước 4: Sinh chỉ số delete ngẫu nhiên (có thể dùng lại hàm generateIndices hoặc random)
+    int num_delete = getNumOps("deletes", M);
+    std::vector<int> delete_indices = all_indices;
+    std::shuffle(delete_indices.begin(), delete_indices.end(), std::mt19937(std::chrono::steady_clock::now().time_since_epoch().count()));
+    delete_indices.resize(num_delete);
+
+    // Tạo bảng băm cho các cấu hình
     DoubleHashTable<int, int> dht1(N1), dht2(N2);
     LinearHashTable<int, int> lpt1(N1), lpt2(N2);
     QuadraticHashTable<int, int> qpt1(N1), qpt2(N2);
 
-    // Test và đo thời gian
-    auto dht1_stat = testTable(dht1, keyvals, search_indices, delete_indices);
-    auto dht2_stat = testTable(dht2, keyvals, search_indices, delete_indices);
-    auto lpt1_stat = testTable(lpt1, keyvals, search_indices, delete_indices);
-    auto lpt2_stat = testTable(lpt2, keyvals, search_indices, delete_indices);
-    auto qpt1_stat = testTable(qpt1, keyvals, search_indices, delete_indices);
-    auto qpt2_stat = testTable(qpt2, keyvals, search_indices, delete_indices);
+    insertAndPrintClusterStats(dht1, lpt1, qpt1, keyvals, "After Insert with LF1");
+    insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
 
-    // In kết quả
+    // Test và đo thời gian, có thể cập nhật hàm testTable để test search hit/miss riêng
+    auto dht1_stat = testTable(dht1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+    auto dht2_stat = testTable(dht2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+    auto lpt1_stat = testTable(lpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+    auto lpt2_stat = testTable(lpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+    auto qpt1_stat = testTable(qpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+    auto qpt2_stat = testTable(qpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+
+    // In bảng thống kê hiệu năng
     printSummaryTable(lf1, lf2, dht1_stat, dht2_stat, lpt1_stat, lpt2_stat, qpt1_stat, qpt2_stat);
 
     std::cout << "\n===== SUMMARY TABLE: PROBES, COLLISIONS, RATES =====\n";
