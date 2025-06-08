@@ -861,88 +861,108 @@ std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_sea
 }
 
 int main(void) {
-    system("color F0");
-
-    // Bước 1: Đầu vào kích thước, load factor
+    // Nhập đầu vào chung
     int M = getTestSize();
     double lf1 = getUserLoadFactor();
-
-    int datatype = 1;
-    std::cout << "Choose key data pattern:\n";
-    std::cout << "  1. Random\n";
-    std::cout << "  2. Sequential\n";
-    std::cout << "  3. Clustered\n";
-    std::cout << "Your choice (1-3): "; 
-    std::cin >> datatype;
-    if (datatype < 1 || datatype > 3) {
-        std::cout << "Invalid choice! Defaulting to Random.\n";
-        datatype = 1;
-    }
-
-    double lf2 = 0.5; // Tự động chọn LF2 là 0.5
+    double lf2 = 0.5; // tự động chọn
 
     int N1 = nextPrime(int(M / lf1));
     int N2 = nextPrime(int(M / lf2));
-
     printTableSizes(lf1, lf2, N1, N2);
 
-    // Bước 2: Sinh key-value ngẫu nhiên
-    std::vector<std::pair<int, int>> keyvals;
-    if (datatype == 1)
-        keyvals = generateRandomKeyVals(M, std::max(N1, N2) * 10);
-    else if (datatype == 2)
-        keyvals = generateSequentialKeyVals(M);
-    else if (datatype == 3)
-        keyvals = generateClusteredKeyVals(M, std::max(N1, N2) * 10);
-
-    // Sinh all_indices cho truy cập các phần tử trong keyvals
-    std::vector<int> all_indices(M);
-    std::iota(all_indices.begin(), all_indices.end(), 0);
-
-    // Bước 3: Sinh search hit/miss theo % miss nhập từ user
-    auto [search_hit_indices, search_miss_keys] = generateSearchHitMissIndices(
-        M, all_indices, keyvals, std::max(N1, N2) * 10
-    );
-    int num_search = search_hit_indices.size() + search_miss_keys.size();
-    std::cout << "Total searches: " << num_search
-              << " (" << search_hit_indices.size() << " hit, "
-              << search_miss_keys.size() << " miss)\n";
-
-    // Bước 4: Sinh chỉ số delete ngẫu nhiên (có thể dùng lại hàm generateIndices hoặc random)
+    // Nhập miss rate và số delete chỉ 1 lần
+    double miss_rate = -1;
+    while (miss_rate < 0 || miss_rate > 1) {
+        std::cout << "Enter the miss rate (0-1) for search operations: ";
+        std::cin >> miss_rate;
+        if (miss_rate < 0 || miss_rate > 1) {
+            std::cout << "Invalid rate! Please enter a value between 0 and 1.\n";
+        }
+    }
     int num_delete = getNumOps("deletes", M);
-    std::vector<int> delete_indices = all_indices;
-    std::shuffle(delete_indices.begin(), delete_indices.end(), std::mt19937(std::chrono::steady_clock::now().time_since_epoch().count()));
-    delete_indices.resize(num_delete);
 
-    // Tạo bảng băm cho các cấu hình
-    DoubleHashTable<int, int> dht1(N1), dht2(N2);
-    LinearHashTable<int, int> lpt1(N1), lpt2(N2);
-    QuadraticHashTable<int, int> qpt1(N1), qpt2(N2);
+    // Lặp qua cả 3 kiểu dữ liệu
+    for (int datatype = 1; datatype <= 3; ++datatype) {
+        std::string patternName;
+        if (datatype == 1) patternName = "RANDOM";
+        else if (datatype == 2) patternName = "SEQUENTIAL";
+        else patternName = "CLUSTERED";
 
-    insertAndPrintClusterStats(dht1, lpt1, qpt1, keyvals, "After Insert with LF1");
-    insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
+        std::cout << "\n===============================\n";
+        std::cout << ">>> DATA PATTERN: " << patternName << "\n";
 
-    // Test và đo thời gian, có thể cập nhật hàm testTable để test search hit/miss riêng
-    auto dht1_stat = testTable(dht1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-    auto dht2_stat = testTable(dht2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-    auto lpt1_stat = testTable(lpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-    auto lpt2_stat = testTable(lpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-    auto qpt1_stat = testTable(qpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-    auto qpt2_stat = testTable(qpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+        // Tạo key-value tương ứng
+        std::vector<std::pair<int, int>> keyvals;
+        if (datatype == 1)
+            keyvals = generateRandomKeyVals(M, std::max(N1, N2) * 10);
+        else if (datatype == 2)
+            keyvals = generateSequentialKeyVals(M);
+        else
+            keyvals = generateClusteredKeyVals(M, std::max(N1, N2) * 10);
 
-    // In bảng thống kê hiệu năng
-    printSummaryTable(lf1, lf2, dht1_stat, dht2_stat, lpt1_stat, lpt2_stat, qpt1_stat, qpt2_stat);
+        // Sinh chỉ số search hit/miss
+        std::vector<int> all_indices(M);
+        std::iota(all_indices.begin(), all_indices.end(), 0);
 
-    std::cout << "\n===== SUMMARY TABLE: PROBES, COLLISIONS, RATES =====\n";
-    printDetailHeader();
-    printDetailStats("DoubleHash-LF1", lf1, dht1);
-    printDetailStats("LinearProb-LF1", lf1, lpt1);
-    printDetailStats("QuadraticProb-LF1", lf1, qpt1);
-    printDetailStats("DoubleHash-LF2", lf2, dht2);
-    printDetailStats("LinearProb-LF2", lf2, lpt2);
-    printDetailStats("QuadraticProb-LF2", lf2, qpt2);
+        int num_search = M;
+        int num_miss = int(num_search * miss_rate + 0.5);
+        int num_hit = num_search - num_miss;
 
-    std::cout << "\n=== FINISHED ===\n";
+        // Hit indices
+        std::vector<int> indices = all_indices;
+        std::shuffle(indices.begin(), indices.end(), std::mt19937(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::vector<int> search_hit_indices(indices.begin(), indices.begin() + num_hit);
+
+        // Miss keys
+        std::unordered_set<int> exist_keys;
+        for (const auto& kv : keyvals) exist_keys.insert(kv.first);
+        std::vector<int> search_miss_keys;
+        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::uniform_int_distribution<int> dist_key(1, std::max(N1, N2) * 10);
+        while ((int)search_miss_keys.size() < num_miss) {
+            int key = dist_key(rng);
+            if (exist_keys.count(key)) continue;
+            search_miss_keys.push_back(key);
+            exist_keys.insert(key);
+        }
+
+        // Delete indices
+        std::vector<int> delete_indices = all_indices;
+        std::shuffle(delete_indices.begin(), delete_indices.end(), rng);
+        delete_indices.resize(num_delete);
+
+        // Tạo bảng băm cho 2 cấu hình LF1 và LF2
+        DoubleHashTable<int, int> dht1(N1), dht2(N2);
+        LinearHashTable<int, int> lpt1(N1), lpt2(N2);
+        QuadraticHashTable<int, int> qpt1(N1), qpt2(N2);
+
+        // Thống kê cluster
+        insertAndPrintClusterStats(dht1, lpt1, qpt1, keyvals, "After Insert with LF1");
+        insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
+
+        // Đo hiệu năng
+        auto dht1_stat = testTable(dht1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+        auto dht2_stat = testTable(dht2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+        auto lpt1_stat = testTable(lpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+        auto lpt2_stat = testTable(lpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+        auto qpt1_stat = testTable(qpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+        auto qpt2_stat = testTable(qpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+
+        // In bảng thống kê hiệu năng
+        printSummaryTable(lf1, lf2, dht1_stat, dht2_stat, lpt1_stat, lpt2_stat, qpt1_stat, qpt2_stat);
+
+        std::cout << "\n===== SUMMARY TABLE: PROBES, COLLISIONS, RATES =====\n";
+        printDetailHeader();
+        printDetailStats("DoubleHash-LF1", lf1, dht1);
+        printDetailStats("LinearProb-LF1", lf1, lpt1);
+        printDetailStats("QuadraticProb-LF1", lf1, qpt1);
+        printDetailStats("DoubleHash-LF2", lf2, dht2);
+        printDetailStats("LinearProb-LF2", lf2, lpt2);
+        printDetailStats("QuadraticProb-LF2", lf2, qpt2);
+        std::cout << "\n";
+    }
+
+    std::cout << "\n=== FINISHED ALL DATA PATTERNS ===\n";
     system("pause");
     return 0;
 }
