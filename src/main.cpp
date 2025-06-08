@@ -800,21 +800,49 @@ std::pair<std::vector<int>, std::vector<int>> generateSearchHitMissIndices(
     return {hit_indices, miss_keys};
 }
 
-std::vector<std::pair<int, int>> generateUniqueKeyVals(int M, int N1, int N2) {
+std::vector<std::pair<int, int>> generateRandomKeyVals(int M, int key_upper, int val_upper = 1000000) {
     std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-    std::uniform_int_distribution<int> dist_key(1, std::max(N1, N2) * 10);
-    std::uniform_int_distribution<int> dist_val(1, 1000000);
+    std::uniform_int_distribution<int> dist_key(1, key_upper);
+    std::uniform_int_distribution<int> dist_val(1, val_upper);
 
     std::unordered_set<int> used;
     std::vector<std::pair<int, int>> keyvals;
-
     while ((int)keyvals.size() < M) {
         int key = dist_key(rng);
         if (used.count(key)) continue;
         used.insert(key);
         keyvals.emplace_back(key, dist_val(rng));
     }
-    std::cout << "=> Successfully generated test values <=\n";
+    return keyvals;
+}
+
+std::vector<std::pair<int, int>> generateSequentialKeyVals(int M, int val_upper = 1000000) {
+    std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::uniform_int_distribution<int> dist_val(1, val_upper);
+    std::vector<std::pair<int, int>> keyvals;
+    for (int i = 1; i <= M; ++i)
+        keyvals.emplace_back(i, dist_val(rng));
+    return keyvals;
+}
+
+std::vector<std::pair<int, int>> generateClusteredKeyVals(int M, int key_upper, int val_upper = 1000000) {
+    std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::uniform_int_distribution<int> dist_val(1, val_upper);
+
+    int num_clusters = 5;
+    int per_cluster = M / num_clusters;
+    std::vector<std::pair<int, int>> keyvals;
+    int base = 1;
+    for (int c = 0; c < num_clusters; ++c) {
+        for (int i = 0; i < per_cluster && (int)keyvals.size() < M; ++i) {
+            keyvals.emplace_back(base + i, dist_val(rng));
+        }
+        base += key_upper / num_clusters; // Nhảy cụm
+    }
+    // Nếu chưa đủ, sinh thêm key lẻ cuối cùng
+    while ((int)keyvals.size() < M) {
+        keyvals.emplace_back(base++, dist_val(rng));
+    }
     return keyvals;
 }
 
@@ -838,6 +866,19 @@ int main(void) {
     // Bước 1: Đầu vào kích thước, load factor
     int M = getTestSize();
     double lf1 = getUserLoadFactor();
+
+    int datatype = 1;
+    std::cout << "Choose key data pattern:\n";
+    std::cout << "  1. Random\n";
+    std::cout << "  2. Sequential\n";
+    std::cout << "  3. Clustered\n";
+    std::cout << "Your choice (1-3): "; 
+    std::cin >> datatype;
+    if (datatype < 1 || datatype > 3) {
+        std::cout << "Invalid choice! Defaulting to Random.\n";
+        datatype = 1;
+    }
+
     double lf2 = 0.5; // Tự động chọn LF2 là 0.5
 
     int N1 = nextPrime(int(M / lf1));
@@ -846,7 +887,13 @@ int main(void) {
     printTableSizes(lf1, lf2, N1, N2);
 
     // Bước 2: Sinh key-value ngẫu nhiên
-    auto keyvals = generateUniqueKeyVals(M, N1, N2);
+    std::vector<std::pair<int, int>> keyvals;
+    if (datatype == 1)
+        keyvals = generateRandomKeyVals(M, std::max(N1, N2) * 10);
+    else if (datatype == 2)
+        keyvals = generateSequentialKeyVals(M);
+    else if (datatype == 3)
+        keyvals = generateClusteredKeyVals(M, std::max(N1, N2) * 10);
 
     // Sinh all_indices cho truy cập các phần tử trong keyvals
     std::vector<int> all_indices(M);
