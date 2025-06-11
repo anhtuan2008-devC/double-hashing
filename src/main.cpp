@@ -5,8 +5,6 @@
 #include <iomanip>
 #include <sstream>
 #include <unordered_set>
-#include <numeric>
-#include <algorithm>
 
 enum SlotState { 
     EMPTY, 
@@ -90,6 +88,22 @@ int getTestSize();
 double getUserLoadFactor();
 void printTableSizes(double lf1, double lf2, int N1, int N2);
 std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_search, int num_delete);
+
+template<typename T>
+void shuffle(std::vector<T>& vec, std::mt19937& rng) {
+    for (int i = vec.size() - 1; i > 0; --i) {
+        std::uniform_int_distribution<int> dist(0, i);
+        int j = dist(rng);
+        std::swap(vec[i], vec[j]);
+    }
+}
+
+template<typename Iterator, typename T>
+void iota(Iterator begin, Iterator end, T value) {
+    while (begin != end) {
+        *begin++ = value++;
+    }
+}
 
 // Hàm kiểm tra số nguyên tố
 bool isPrime(int n) {
@@ -703,7 +717,7 @@ std::pair<std::vector<int>, std::vector<int>> generateSearchHitMissIndices(const
 
     // Chọn ngẫu nhiên num_hit chỉ số trong all_indices (truy cập key hợp lệ)
     std::vector<int> indices = all_indices;
-    std::shuffle(indices.begin(), indices.end(), rng);
+    shuffle(indices.begin(), indices.end(), rng);
     hit_indices.assign(indices.begin(), indices.begin() + num_hit);
 
     // Lấy tập key đã tồn tại để sinh miss key không trùng
@@ -769,12 +783,12 @@ std::vector<std::pair<int, int>> generateClusteredKeyVals(int M, int key_upper, 
 std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_search, int num_delete) {
     std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
     std::vector<int> all_indices(M), search_indices, delete_indices;
-    std::iota(all_indices.begin(), all_indices.end(), 0);
+    iota(all_indices.begin(), all_indices.end(), 0);
 
-    std::shuffle(all_indices.begin(), all_indices.end(), rng);
+    shuffle(all_indices.begin(), all_indices.end(), rng);
     search_indices.assign(all_indices.begin(), all_indices.begin() + num_search);
 
-    std::shuffle(all_indices.begin(), all_indices.end(), rng);
+    shuffle(all_indices.begin(), all_indices.end(), rng);
     delete_indices.assign(all_indices.begin(), all_indices.begin() + num_delete);
 
     return {search_indices, delete_indices};
@@ -823,7 +837,7 @@ int main(void) {
 
         // Sinh chỉ số search hit/miss
         std::vector<int> all_indices(M);
-        std::iota(all_indices.begin(), all_indices.end(), 0);
+        iota(all_indices.begin(), all_indices.end(), 0);
 
         int num_search = M;
         int num_miss = int(num_search * miss_rate + 0.5);
@@ -831,7 +845,7 @@ int main(void) {
 
         // Hit indices
         std::vector<int> indices = all_indices;
-        std::shuffle(indices.begin(), indices.end(), std::mt19937(std::chrono::steady_clock::now().time_since_epoch().count()));
+        shuffle(indices.begin(), indices.end(), std::mt19937(std::chrono::steady_clock::now().time_since_epoch().count()));
         std::vector<int> search_hit_indices(indices.begin(), indices.begin() + num_hit);
 
         // Miss keys
@@ -849,7 +863,7 @@ int main(void) {
 
         // Delete indices
         std::vector<int> delete_indices = all_indices;
-        std::shuffle(delete_indices.begin(), delete_indices.end(), rng);
+        shuffle(delete_indices.begin(), delete_indices.end(), rng);
         delete_indices.resize(num_delete);
 
         // Tạo bảng băm cho 2 cấu hình LF1 và LF2
