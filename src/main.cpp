@@ -43,10 +43,48 @@ struct HashStats {
     int nDelete = 0;
 };
 
+struct ClusterUtils {
+    template<typename EntryType>
+    static int maxClusterLength(const std::vector<EntryType>& table) {
+        int maxLen = 0, curLen = 0;
+        for (const auto& entry : table) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+                maxLen = std::max(maxLen, curLen);
+            } else {
+                curLen = 0;
+            }
+        }
+        return maxLen;
+    }
+
+    template<typename EntryType>
+    static double avgClusterLength(const std::vector<EntryType>& table) {
+        int totalClusters = 0, totalLen = 0, curLen = 0;
+        for (const auto& entry : table) {
+            if (entry.state == OCCUPIED) {
+                ++curLen;
+            } else {
+                if (curLen > 0) {
+                    ++totalClusters;
+                    totalLen += curLen;
+                    curLen = 0;
+                }
+            }
+        }
+        // Nếu bảng kết thúc bằng một cluster
+        if (curLen > 0) {
+            ++totalClusters;
+            totalLen += curLen;
+        }
+        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
+    }
+};
+
 bool isPrime(int n);
 int nextPrime(int n);
 std::string doubleToStr(double x, int precision = 2);
-void printSummaryTable(double lf1, double lf2, StatResult dht1, StatResult dht2, StatResult lpt1, StatResult lpt2, StatResult qpt1, StatResult qpt2);
+void printSummaryTable(double lf1, double lf2, const StatResult& dht1, const StatResult& dht2, const StatResult& lpt1, const StatResult& lpt2, const StatResult& qpt1, const StatResult& qpt2);
 void printDetailHeader(void);
 int getTestSize();
 double getUserLoadFactor();
@@ -54,31 +92,22 @@ void printTableSizes(double lf1, double lf2, int N1, int N2);
 int getNumOps(const std::string& opName, int maxVal);
 std::vector<std::pair<int, int>> generateUniqueKeyVals(int M, int N1, int N2);
 std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_search, int num_delete);
-template<typename DHTable, typename LTable, typename QTable>
-void insertAndPrintClusterStats(
-    const DHTable&, const LTable&, const QTable&,
-    const std::vector<std::pair<int, int>>&,
-    const std::string& label
-);
 
 // Hàm kiểm tra số nguyên tố
 bool isPrime(int n) {
-    if (n < 2) {
+    if (n < 2)
         return false;
-    }
     for (int i = 2; i * i <= n; ++i) {
-        if (n % i == 0) {
+        if (n % i == 0) 
             return false;
-        }
     }
     return true;
 }
 // Tìm số nguyên tố lớn hơn n
 int nextPrime(int n) {
     int x = n + 1;
-    while (!isPrime(x)) {
+    while (!isPrime(x)) 
         ++x;
-    }
     return x;
 }
 // Chuyển từ double sang string với precision tùy chỉnh
@@ -101,16 +130,24 @@ public:
 
     DoubleHashTable(int n) {
         TABLE_SIZE = n;
-        isPrimeArr.assign(n, true);
-        for (int i = 2; i * i < n; ++i)
-            if (isPrimeArr[i])
-                for (int j = i * i; j < n; j += i)
-                    isPrimeArr[j] = false;
-        PRIME = TABLE_SIZE - 1;
-        while (PRIME > 1 && !isPrimeArr[PRIME]) 
-            PRIME--;
         keysPresent = 0;
         hashTable.assign(TABLE_SIZE, Entry<K, V>());
+
+        // Khởi tạo mảng kiểm tra số nguyên tố
+        isPrimeArr = std::vector<bool>(TABLE_SIZE, true);
+        if (TABLE_SIZE >= 2) isPrimeArr[0] = isPrimeArr[1] = false;
+        for (int i = 2; i * i < TABLE_SIZE; ++i) {
+            if (isPrimeArr[i]) {
+                for (int j = i * i; j < TABLE_SIZE; j += i) {
+                    isPrimeArr[j] = false;
+                }
+            }
+        }
+
+        // Tìm số nguyên tố lớn nhất < TABLE_SIZE
+        PRIME = TABLE_SIZE - 1;
+        while (PRIME > 1 && !isPrimeArr[PRIME])
+            PRIME--;
     }
     
     int hash1(const K& key) { 
@@ -121,9 +158,8 @@ public:
         return PRIME - (std::hash<K>{}(key) % PRIME); 
     }
 
-    bool isFull() 
-    { 
-        return keysPresent == TABLE_SIZE; 
+    bool isFull() {
+        return keysPresent == TABLE_SIZE;
     }
 
     bool insert(const K& key, const V& value) {
@@ -210,39 +246,12 @@ public:
     }
 
     int maxClusterLength() const {
-        int maxLen = 0, curLen = 0;
-        for (const auto& entry : hashTable) {
-            if (entry.state == OCCUPIED) {
-                ++curLen;
-                maxLen = std::max(maxLen, curLen);
-            } else {
-                curLen = 0;
-            }
-        }
-        return maxLen;
+        return ClusterUtils::maxClusterLength(hashTable);
     }
 
     double avgClusterLength() const {
-        int totalClusters = 0, totalLen = 0, curLen = 0;
-        for (const auto& entry : hashTable) {
-            if (entry.state == OCCUPIED) {
-                ++curLen;
-            } else {
-                if (curLen > 0) {
-                    ++totalClusters;
-                    totalLen += curLen;
-                    curLen = 0;
-                }
-            }
-        }
-        // Nếu bảng kết thúc bằng một cluster
-        if (curLen > 0) {
-            ++totalClusters;
-            totalLen += curLen;
-        }
-        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
+        return ClusterUtils::avgClusterLength(hashTable);
     }
-
 };
 
 // ======= Linear Probing Table =======
@@ -327,38 +336,12 @@ public:
         stats.nDelete++;
     }
 
-        int maxClusterLength() const {
-        int maxLen = 0, curLen = 0;
-        for (const auto& entry : hashTable) {
-            if (entry.state == OCCUPIED) {
-                ++curLen;
-                maxLen = std::max(maxLen, curLen);
-            } else {
-                curLen = 0;
-            }
-        }
-        return maxLen;
+    int maxClusterLength() const {
+        return ClusterUtils::maxClusterLength(hashTable);
     }
 
     double avgClusterLength() const {
-        int totalClusters = 0, totalLen = 0, curLen = 0;
-        for (const auto& entry : hashTable) {
-            if (entry.state == OCCUPIED) {
-                ++curLen;
-            } else {
-                if (curLen > 0) {
-                    ++totalClusters;
-                    totalLen += curLen;
-                    curLen = 0;
-                }
-            }
-        }
-        // Nếu bảng kết thúc bằng một cluster
-        if (curLen > 0) {
-            ++totalClusters;
-            totalLen += curLen;
-        }
-        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
+        return ClusterUtils::avgClusterLength(hashTable);
     }
 };
 
@@ -455,46 +438,16 @@ public:
     }
 
     int maxClusterLength() const {
-        int maxLen = 0, curLen = 0;
-        for (const auto& entry : hashTable) {
-            if (entry.state == OCCUPIED) {
-                ++curLen;
-                maxLen = std::max(maxLen, curLen);
-            } else {
-                curLen = 0;
-            }
-        }
-        return maxLen;
+        return ClusterUtils::maxClusterLength(hashTable);
     }
 
     double avgClusterLength() const {
-        int totalClusters = 0, totalLen = 0, curLen = 0;
-        for (const auto& entry : hashTable) {
-            if (entry.state == OCCUPIED) {
-                ++curLen;
-            } else {
-                if (curLen > 0) {
-                    ++totalClusters;
-                    totalLen += curLen;
-                    curLen = 0;
-                }
-            }
-        }
-        // Nếu bảng kết thúc bằng một cluster
-        if (curLen > 0) {
-            ++totalClusters;
-            totalLen += curLen;
-        }
-        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
+        return ClusterUtils::avgClusterLength(hashTable);
     }
 };
 
 template<typename DHTable, typename LTable, typename QTable>
-void insertAndPrintClusterStats(
-    const DHTable& dht, const LTable& lpt, const QTable& qpt,
-    const std::vector<std::pair<int, int>>& keyvals,
-    const std::string& label = ""
-) {
+void insertAndPrintClusterStats(const DHTable& dht, const LTable& lpt, const QTable& qpt, const std::vector<std::pair<int, int>>& keyvals, const std::string& label = "") {
     DHTable dht_copy = dht;
     LTable lpt_copy = lpt;
     QTable qpt_copy = qpt;
@@ -520,14 +473,8 @@ void insertAndPrintClusterStats(
 
 // Hàm tính thời gian thực hiện các thao tác trên bảng băm
 template <typename Table>
-StatResult testTable(
-    Table& table,
-    const std::vector<std::pair<int, int>>& keyvals,
-    const std::vector<int>& search_hit_indices,
-    const std::vector<int>& search_miss_keys,
-    const std::vector<int>& delete_indices
-) {
-    constexpr int NUM_RUNS = 10;
+StatResult testTable(Table& table, const std::vector<std::pair<int, int>>& keyvals, const std::vector<int>& search_hit_indices, const std::vector<int>& search_miss_keys, const std::vector<int>& delete_indices) {
+    constexpr int NUM_RUNS = 3;
     StatResult res;
     long long totalInsertTime = 0, totalSearchHitTime = 0, totalSearchMissTime = 0, totalDeleteTime = 0;
 
@@ -571,7 +518,6 @@ StatResult testTable(
         auto t8 = std::chrono::high_resolution_clock::now();
 
         // Insert lại các key vừa xóa (giá trị mới random)
-        auto t9 = std::chrono::high_resolution_clock::now();
         std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
         std::uniform_int_distribution<int> dist_val(1, 1000000);
         for (int idx : delete_indices) {
@@ -580,7 +526,6 @@ StatResult testTable(
             totalProbeInsertAfterDelete += tempTable.stats.totalProbesInsert - probes_before;
             nInsertAfterDelete++;
         }
-        auto t10 = std::chrono::high_resolution_clock::now();
 
         // Tính thời gian từng phần (chia nhỏ rõ ràng)
         totalInsertTime      += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
@@ -607,12 +552,7 @@ StatResult testTable(
 }
 
 // Hàm in bảng thống kê tổng hợp thời gian thực hiện các thao tác
-void printSummaryTable(
-    double lf1, double lf2,
-    StatResult dht1, StatResult dht2,
-    StatResult lpt1, StatResult lpt2,
-    StatResult qpt1, StatResult qpt2
-) {
+void printSummaryTable(double lf1, double lf2, const StatResult& dht1, const StatResult& dht2, const StatResult& lpt1, const StatResult& lpt2, const StatResult& qpt1, const StatResult& qpt2) {
     std::cout << "\n===== TABLE OF PERFORMANCE COMPARISON (us) =====\n";
     std::cout << std::setw(50) << std::left << " "
         << std::setw(20) << "Double Hashing"
@@ -757,12 +697,7 @@ int getNumOps(const std::string& opName, int maxVal) {
 }
 
 // Hàm sinh search hit/miss indices với num_search mặc định = M, miss_rate nhập từ user
-std::pair<std::vector<int>, std::vector<int>> generateSearchHitMissIndices(
-    int M,
-    const std::vector<int>& all_indices,
-    const std::vector<std::pair<int, int>>& keyvals,
-    int key_upper_bound 
-) {
+std::pair<std::vector<int>, std::vector<int>> generateSearchHitMissIndices(const int& M, const std::vector<int>& all_indices, const std::vector<std::pair<int, int>>& keyvals,const int& key_upper_bound ) {
     int num_search = M;
     double miss_rate = -1;
     while (miss_rate < 0 || miss_rate > 1) {
@@ -963,6 +898,5 @@ int main(void) {
     }
 
     std::cout << "\n=== FINISHED ALL DATA PATTERNS ===\n";
-    system("pause");
     return 0;
 }
