@@ -7,10 +7,12 @@
 
 # IDE
 .vscode/
+.idea/
 *.suo
 *.user
 *.ncb
 *.log
+.cmake-build-debug/
 
 # OS
 .DS_Store
@@ -18,3 +20,4 @@ Thumbs.db
 
 # Test binaries
 run_tests
+
