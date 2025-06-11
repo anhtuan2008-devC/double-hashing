@@ -450,6 +450,423 @@ public:
     }
 };
 
+template<typename K, typename V>
+class DynamicDoubleHashTable {
+    int TABLE_SIZE;
+    int keysPresent;
+    int PRIME;
+    std::vector<Entry<K, V>> hashTable;
+    std::vector<bool> isPrimeArr;
+    const double MAX_LOAD_FACTOR = 0.7;
+
+public:
+    HashStats stats;
+
+    DynamicDoubleHashTable(int init_size = 101) {
+        TABLE_SIZE = helper::nextPrime(init_size);
+        keysPresent = 0;
+        hashTable.assign(TABLE_SIZE, Entry<K, V>());
+        precomputePrimes();
+        PRIME = findLargestPrimeBelow(TABLE_SIZE);
+    }
+
+    int hash1(const K& key) const {
+        return std::hash<K>{}(key) % TABLE_SIZE;
+    }
+
+    int hash2(const K& key) const {
+        return PRIME - (std::hash<K>{}(key) % PRIME);
+    }
+
+    bool insert(const K& key, const V& value) {
+        if (loadFactor() > MAX_LOAD_FACTOR) {
+            rehash(TABLE_SIZE * 2);
+        }
+
+        int probe = hash1(key);
+        int offset = hash2(key);
+        int probes = 1;
+        if (hashTable[probe].state == OCCUPIED)
+            stats.totalCollision++;
+
+        while (hashTable[probe].state == OCCUPIED && hashTable[probe].key != key) {
+            probe = (probe + offset) % TABLE_SIZE;
+            probes++;
+        }
+
+        if (hashTable[probe].state != OCCUPIED) {
+            hashTable[probe] = Entry<K, V>(key, value, OCCUPIED);
+            keysPresent++;
+            stats.totalProbesInsert += probes;
+            stats.nInsert++;
+            return true;
+        }
+        else if (hashTable[probe].key == key) {
+            hashTable[probe].value = value;
+            return true;
+        }
+        return false;
+    }
+
+    bool search(const K& key, V& outValue) {
+        int probe = hash1(key);
+        int offset = hash2(key);
+        int initialPos = probe;
+        int probes = 1;
+        bool firstItr = true;
+
+        while (true) {
+            if (hashTable[probe].state == EMPTY) break;
+            if (hashTable[probe].state == OCCUPIED && hashTable[probe].key == key) {
+                outValue = hashTable[probe].value;
+                stats.totalProbesSearch += probes;
+                stats.nSearch++;
+                return true;
+            }
+            if (probe == initialPos && !firstItr) break;
+            probe = (probe + offset) % TABLE_SIZE;
+            probes++;
+            firstItr = false;
+        }
+        stats.totalProbesSearch += probes;
+        stats.nSearch++;
+        return false;
+    }
+
+    void erase(const K& key) {
+        int probe = hash1(key);
+        int offset = hash2(key);
+        int initialPos = probe;
+        int probes = 1;
+        bool firstItr = true;
+
+        while (true) {
+            if (hashTable[probe].state == EMPTY) {
+                stats.totalProbesDelete += probes;
+                stats.nDelete++;
+                return;
+            }
+            if (hashTable[probe].state == OCCUPIED && hashTable[probe].key == key) {
+                hashTable[probe].state = DELETED;
+                keysPresent--;
+                stats.totalProbesDelete += probes;
+                stats.nDelete++;
+                return;
+            }
+            if (probe == initialPos && !firstItr) {
+                stats.totalProbesDelete += probes;
+                stats.nDelete++;
+                return;
+            }
+            probe = (probe + offset) % TABLE_SIZE;
+            probes++;
+            firstItr = false;
+        }
+    }
+
+    double loadFactor() const {
+        return static_cast<double>(keysPresent) / TABLE_SIZE;
+    }
+
+    void rehash(int new_size_hint) {
+        int new_size = helper::nextPrime(new_size_hint);
+        std::vector<Entry<K, V>> oldTable = hashTable;
+
+        TABLE_SIZE = new_size;
+        keysPresent = 0;
+        hashTable.assign(TABLE_SIZE, Entry<K, V>());
+
+        precomputePrimes();
+        PRIME = findLargestPrimeBelow(TABLE_SIZE);
+
+        for (const auto& entry : oldTable) {
+            if (entry.state == OCCUPIED) {
+                insert(entry.key, entry.value);
+            }
+        }
+    }
+
+    void precomputePrimes() {
+        isPrimeArr.assign(TABLE_SIZE, true);
+        if (TABLE_SIZE >= 2) isPrimeArr[0] = isPrimeArr[1] = false;
+        for (int i = 2; i * i < TABLE_SIZE; ++i) {
+            if (isPrimeArr[i]) {
+                for (int j = i * i; j < TABLE_SIZE; j += i) {
+                    isPrimeArr[j] = false;
+                }
+            }
+        }
+    }
+
+    int findLargestPrimeBelow(int n) {
+        for (int i = n - 1; i >= 2; --i) {
+            if (isPrimeArr[i]) return i;
+        }
+        return 2;
+    }
+
+    int maxClusterLength() const {
+        return ClusterUtils::maxClusterLength(hashTable);
+    }
+
+    double avgClusterLength() const {
+        return ClusterUtils::avgClusterLength(hashTable);
+    }
+
+    int size() const {
+        return TABLE_SIZE;
+    }
+};
+
+template<typename K, typename V>
+class DynamicLinearHashTable {
+    int TABLE_SIZE;
+    int keysPresent;
+    std::vector<Entry<K, V>> hashTable;
+
+    void rehash() {
+        int newSize = helper::nextPrime(TABLE_SIZE * 2);
+        std::vector<Entry<K, V>> oldTable = hashTable;
+        TABLE_SIZE = newSize;
+        keysPresent = 0;
+        hashTable.assign(TABLE_SIZE, Entry<K, V>());
+
+        for (const auto& entry : oldTable) {
+            if (entry.state == OCCUPIED) {
+                insert(entry.key, entry.value);
+            }
+        }
+    }
+
+public:
+    HashStats stats;
+
+    DynamicLinearHashTable(int initialSize = 17) {
+        TABLE_SIZE = helper::nextPrime(initialSize);
+        keysPresent = 0;
+        hashTable.assign(TABLE_SIZE, Entry<K, V>());
+    }
+
+    double loadFactor() const {
+        return 1.0 * keysPresent / TABLE_SIZE;
+    }
+
+    int hash(const K& key) const {
+        return std::hash<K>{}(key) % TABLE_SIZE;
+    }
+
+    bool insert(const K& key, const V& value) {
+        if (loadFactor() > 0.7)
+            rehash();
+
+        int probe = hash(key);
+        int probes = 1;
+
+        if (hashTable[probe].state == OCCUPIED)
+            stats.totalCollision++;
+
+        while (hashTable[probe].state == OCCUPIED && hashTable[probe].key != key) {
+            probe = (probe + 1) % TABLE_SIZE;
+            probes++;
+        }
+
+        if (hashTable[probe].state != OCCUPIED) {
+            hashTable[probe] = Entry<K, V>(key, value, OCCUPIED);
+            keysPresent++;
+            stats.totalProbesInsert += probes;
+            stats.nInsert++;
+            return true;
+        }
+        else if (hashTable[probe].key == key) {
+            hashTable[probe].value = value;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool search(const K& key, V& outValue) {
+        int probe = hash(key);
+        int probes = 1;
+
+        while (hashTable[probe].state != EMPTY) {
+            if (hashTable[probe].state == OCCUPIED && hashTable[probe].key == key) {
+                outValue = hashTable[probe].value;
+                stats.totalProbesSearch += probes;
+                stats.nSearch++;
+                return true;
+            }
+            probe = (probe + 1) % TABLE_SIZE;
+            probes++;
+        }
+
+        stats.totalProbesSearch += probes;
+        stats.nSearch++;
+        return false;
+    }
+
+    void erase(const K& key) {
+        int probe = hash(key);
+        int probes = 1;
+
+        while (hashTable[probe].state != EMPTY) {
+            if (hashTable[probe].state == OCCUPIED && hashTable[probe].key == key) {
+                hashTable[probe].state = DELETED;
+                keysPresent--;
+                stats.totalProbesDelete += probes;
+                stats.nDelete++;
+                return;
+            }
+            probe = (probe + 1) % TABLE_SIZE;
+            probes++;
+        }
+
+        stats.totalProbesDelete += probes;
+        stats.nDelete++;
+    }
+
+    int maxClusterLength() const {
+        return ClusterUtils::maxClusterLength(hashTable);
+    }
+
+    double avgClusterLength() const {
+        return ClusterUtils::avgClusterLength(hashTable);
+    }
+
+    int size() const {
+        return TABLE_SIZE;
+    }
+};
+
+template<typename K, typename V>
+class DynamicQuadraticHashTable {
+    int TABLE_SIZE;
+    int keysPresent;
+    std::vector<Entry<K, V>> hashTable;
+
+    void rehash() {
+        int newSize = helper::nextPrime(TABLE_SIZE * 2);
+        std::vector<Entry<K, V>> oldTable = hashTable;
+        TABLE_SIZE = newSize;
+        keysPresent = 0;
+        hashTable.assign(TABLE_SIZE, Entry<K, V>());
+
+        for (const auto& entry : oldTable) {
+            if (entry.state == OCCUPIED) {
+                insert(entry.key, entry.value);
+            }
+        }
+    }
+
+public:
+    HashStats stats;
+
+    DynamicQuadraticHashTable(int initialSize = 17) {
+        TABLE_SIZE = helper::nextPrime(initialSize);
+        keysPresent = 0;
+        hashTable.assign(TABLE_SIZE, Entry<K, V>());
+    }
+
+    double loadFactor() const {
+        return 1.0 * keysPresent / TABLE_SIZE;
+    }
+
+    int hash(const K& key) const {
+        return std::hash<K>{}(key) % TABLE_SIZE;
+    }
+
+    bool insert(const K& key, const V& value) {
+        if (loadFactor() > 0.7)
+            rehash();
+
+        int base = hash(key);
+        int i = 0;
+        int probes = 0;
+
+        while (i < TABLE_SIZE) {
+            int probe = (base + i * i) % TABLE_SIZE;
+            probes++;
+            if (i == 0 && hashTable[probe].state == OCCUPIED)
+                stats.totalCollision++;
+
+            if (hashTable[probe].state == EMPTY || hashTable[probe].state == DELETED) {
+                hashTable[probe] = Entry<K, V>(key, value, OCCUPIED);
+                keysPresent++;
+                stats.totalProbesInsert += probes;
+                stats.nInsert++;
+                return true;
+            }
+            else if (hashTable[probe].key == key) {
+                hashTable[probe].value = value;
+                return true;
+            }
+            i++;
+        }
+
+        return false;
+    }
+
+    bool search(const K& key, V& outValue) {
+        int base = hash(key);
+        int i = 0;
+        int probes = 0;
+
+        while (i < TABLE_SIZE) {
+            int probe = (base + i * i) % TABLE_SIZE;
+            probes++;
+            if (hashTable[probe].state == EMPTY)
+                break;
+            if (hashTable[probe].state == OCCUPIED && hashTable[probe].key == key) {
+                outValue = hashTable[probe].value;
+                stats.totalProbesSearch += probes;
+                stats.nSearch++;
+                return true;
+            }
+            i++;
+        }
+
+        stats.totalProbesSearch += probes;
+        stats.nSearch++;
+        return false;
+    }
+
+    void erase(const K& key) {
+        int base = hash(key);
+        int i = 0;
+        int probes = 0;
+
+        while (i < TABLE_SIZE) {
+            int probe = (base + i * i) % TABLE_SIZE;
+            probes++;
+            if (hashTable[probe].state == EMPTY)
+                break;
+            if (hashTable[probe].state == OCCUPIED && hashTable[probe].key == key) {
+                hashTable[probe].state = DELETED;
+                keysPresent--;
+                stats.totalProbesDelete += probes;
+                stats.nDelete++;
+                return;
+            }
+            i++;
+        }
+
+        stats.totalProbesDelete += probes;
+        stats.nDelete++;
+    }
+
+    int maxClusterLength() const {
+        return ClusterUtils::maxClusterLength(hashTable);
+    }
+
+    double avgClusterLength() const {
+        return ClusterUtils::avgClusterLength(hashTable);
+    }
+
+    int size() const {
+        return TABLE_SIZE;
+    }
+};
+
 namespace BenchmarkUtils {
     namespace getInput {
         int getTestSize() {
@@ -646,6 +1063,95 @@ namespace BenchmarkUtils {
         res.avgProbeInsertAfterDelete = (nInsertAfterDelete ? 1.0 * totalProbeInsertAfterDelete / nInsertAfterDelete : 0);
 
         return res;
+    }
+
+    void runDynamicInsertExperiment(int M) {
+        std::cout << "\n=== DYNAMIC TABLE TEST: INSERT M ITEMS ===\n";
+
+        // In header bảng thống kê
+        std::cout << std::left
+            << std::setw(12) << "Pattern"
+            << std::setw(25) << "Algorithm"
+            << std::setw(15) << "InsertTime(us)"
+            << std::setw(12) << "TableSize"
+            << std::setw(12) << "LoadFactor"
+            << std::setw(20) << "MaxClusterLen"
+            << std::setw(20) << "AvgClusterLen" << '\n';
+        std::cout << std::string(116, '-') << '\n';
+
+        for (int pattern = 1; pattern <= 3; ++pattern) {
+            std::string patternName;
+            std::vector<std::pair<int, int>> keyvals;
+
+            if (pattern == 1) {
+                patternName = "RANDOM";
+                keyvals = BenchmarkUtils::generator::generateRandomKeyVals(M, M * 10);
+            }
+            else if (pattern == 2) {
+                patternName = "SEQUENTIAL";
+                keyvals = BenchmarkUtils::generator::generateSequentialKeyVals(M);
+            }
+            else {
+                patternName = "CLUSTERED";
+                keyvals = BenchmarkUtils::generator::generateClusteredKeyVals(M, M * 10);
+            }
+
+            // Dynamic Linear
+            DynamicLinearHashTable<int, int> dlt(17);
+            auto t1 = std::chrono::high_resolution_clock::now();
+            for (const auto& kv : keyvals)
+                dlt.insert(kv.first, kv.second);
+            auto t2 = std::chrono::high_resolution_clock::now();
+            long long time_dlt = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+
+            std::cout << std::left
+                << std::setw(12) << patternName
+                << std::setw(25) << "Dynamic Linear"
+                << std::setw(15) << time_dlt
+                << std::setw(12) << dlt.size()
+                << std::setw(12) << helper::doubleToStr(dlt.loadFactor(), 4)
+                << std::setw(20) << dlt.maxClusterLength()
+                << std::setw(20) << helper::doubleToStr(dlt.avgClusterLength(), 4)
+                << '\n';
+
+            // Dynamic Quadratic
+            DynamicQuadraticHashTable<int, int> dqt(17);
+            auto t3 = std::chrono::high_resolution_clock::now();
+            for (const auto& kv : keyvals)
+                dqt.insert(kv.first, kv.second);
+            auto t4 = std::chrono::high_resolution_clock::now();
+            long long time_dqt = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
+
+            std::cout << std::left
+                << std::setw(12) << patternName
+                << std::setw(25) << "Dynamic Quadratic"
+                << std::setw(15) << time_dqt
+                << std::setw(12) << dqt.size()
+                << std::setw(12) << helper::doubleToStr(dqt.loadFactor(), 4)
+                << std::setw(20) << dqt.maxClusterLength()
+                << std::setw(20) << helper::doubleToStr(dqt.avgClusterLength(), 4)
+                << '\n';
+
+            // Dynamic Double
+            DynamicDoubleHashTable<int, int> ddt(17);
+            auto t5 = std::chrono::high_resolution_clock::now();
+            for (const auto& kv : keyvals)
+                ddt.insert(kv.first, kv.second);
+            auto t6 = std::chrono::high_resolution_clock::now();
+            long long time_ddt = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5).count();
+
+            std::cout << std::left
+                << std::setw(12) << patternName
+                << std::setw(25) << "Dynamic Double"
+                << std::setw(15) << time_ddt
+                << std::setw(12) << ddt.size()
+                << std::setw(12) << helper::doubleToStr(ddt.loadFactor(), 4)
+                << std::setw(20) << ddt.maxClusterLength()
+                << std::setw(20) << helper::doubleToStr(ddt.avgClusterLength(), 4)
+                << '\n';
+        }
+
+        std::cout << "\n=== FINISHED DYNAMIC TABLE TEST ===\n";
     }
 
     namespace printOutput {
@@ -858,5 +1364,10 @@ int main(void) {
     }
 
     std::cout << "\n=== FINISHED ALL DATA PATTERNS ===\n";
+
+    BenchmarkUtils::runDynamicInsertExperiment(M);
+
+	std::cout << "\n=== FINISHED DYNAMIC INSERT EXPERIMENT ===\n";
+
     return 0;
 }
