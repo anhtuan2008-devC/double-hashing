@@ -12,7 +12,7 @@
 *.user
 *.ncb
 *.log
-.cmake-build-debug/
+cmake-build-debug/
 
 # OS
 .DS_Store
