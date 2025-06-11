@@ -89,8 +89,6 @@ void printDetailHeader(void);
 int getTestSize();
 double getUserLoadFactor();
 void printTableSizes(double lf1, double lf2, int N1, int N2);
-int getNumOps(const std::string& opName, int maxVal);
-std::vector<std::pair<int, int>> generateUniqueKeyVals(int M, int N1, int N2);
 std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_search, int num_delete);
 
 // Hàm kiểm tra số nguyên tố
@@ -683,19 +681,6 @@ void printTableSizes(double lf1, double lf2, int N1, int N2) {
     std::cout << "TABLE_SIZE with load factor 2 (" << lf2 << "): " << N2 << '\n';
 }
 
-int getNumOps(const std::string& opName, int maxVal) {
-    int num;
-    do {
-        std::cout << "Enter the number of " << opName << " (MAX " << maxVal << "): ";
-        std::cin >> num;
-        if (num > maxVal) {
-            std::cout << "Too many! Limiting to " << maxVal << ".\n";
-            num = maxVal;
-        }
-    } while (num < 0);
-    return num;
-}
-
 // Hàm sinh search hit/miss indices với num_search mặc định = M, miss_rate nhập từ user
 std::pair<std::vector<int>, std::vector<int>> generateSearchHitMissIndices(const int& M, const std::vector<int>& all_indices, const std::vector<std::pair<int, int>>& keyvals,const int& key_upper_bound ) {
     int num_search = M;
@@ -814,7 +799,8 @@ int main(void) {
             std::cout << "Invalid rate! Please enter a value between 0 and 1.\n";
         }
     }
-    int num_delete = getNumOps("deletes", M);
+
+    int num_delete = M;
 
     // Lặp qua cả 3 kiểu dữ liệu
     for (int datatype = 1; datatype <= 3; ++datatype) {
