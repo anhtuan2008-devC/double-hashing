@@ -450,31 +450,6 @@ public:
     }
 };
 
-template<typename DHTable, typename LTable, typename QTable>
-void insertAndPrintClusterStats(const DHTable& dht, const LTable& lpt, const QTable& qpt, const std::vector<std::pair<int, int>>& keyvals, const std::string& label = "") {
-    DHTable dht_copy = dht;
-    LTable lpt_copy = lpt;
-    QTable qpt_copy = qpt;
-    for (auto& kv : keyvals) {
-        dht_copy.insert(kv.first, kv.second);
-        lpt_copy.insert(kv.first, kv.second);
-        qpt_copy.insert(kv.first, kv.second);
-    }
-    std::cout << "\n===== CLUSTER LENGTH STATISTICS" << (label.empty() ? "" : (" - " + label)) << " =====\n";
-    std::cout << std::setw(32) << std::left << " "
-        << std::setw(20) << "Double Hashing"
-        << std::setw(20) << "Linear Probing"
-        << std::setw(20) << "Quadratic Probing" << '\n';
-    std::cout << std::setw(32) << std::left << "[Max cluster length]:"
-        << std::setw(20) << dht_copy.maxClusterLength()
-        << std::setw(20) << lpt_copy.maxClusterLength()
-        << std::setw(20) << qpt_copy.maxClusterLength() << '\n';
-    std::cout << std::setw(32) << std::left << "[Avg cluster length]:"
-        << std::setw(20) << dht_copy.avgClusterLength()
-        << std::setw(20) << lpt_copy.avgClusterLength()
-        << std::setw(20) << qpt_copy.avgClusterLength() << '\n';
-}
-
 namespace BenchmarkUtils {
     namespace getInput {
         int getTestSize() {
@@ -492,16 +467,16 @@ namespace BenchmarkUtils {
             return lf;
         }
 
-		double getMissRate() {
-			double miss_rate;
-			std::cout << "Enter the miss rate for search operations (0-1): ";
-			std::cin >> miss_rate;
-			while (miss_rate < 0 || miss_rate > 1) {
-				std::cout << "Invalid rate! Please enter a value between 0 and 1: ";
-				std::cin >> miss_rate;
-			}
-			return miss_rate;
-		}
+        double getMissRate() {
+            double miss_rate;
+            std::cout << "Enter the miss rate for search operations (0-1): ";
+            std::cin >> miss_rate;
+            while (miss_rate < 0 || miss_rate > 1) {
+                std::cout << "Invalid rate! Please enter a value between 0 and 1: ";
+                std::cin >> miss_rate;
+            }
+            return miss_rate;
+        }
     }
 
     namespace generator {
@@ -566,6 +541,31 @@ namespace BenchmarkUtils {
 
             return miss_keys;
         }
+    }
+
+    template<typename DHTable, typename LTable, typename QTable>
+    void insertAndPrintClusterStats(const DHTable& dht, const LTable& lpt, const QTable& qpt, const std::vector<std::pair<int, int>>& keyvals, const std::string& label = "") {
+        DHTable dht_copy = dht;
+        LTable lpt_copy = lpt;
+        QTable qpt_copy = qpt;
+        for (auto& kv : keyvals) {
+            dht_copy.insert(kv.first, kv.second);
+            lpt_copy.insert(kv.first, kv.second);
+            qpt_copy.insert(kv.first, kv.second);
+        }
+        std::cout << "\n===== CLUSTER LENGTH STATISTICS" << (label.empty() ? "" : (" - " + label)) << " =====\n";
+        std::cout << std::setw(32) << std::left << " "
+            << std::setw(20) << "Double Hashing"
+            << std::setw(20) << "Linear Probing"
+            << std::setw(20) << "Quadratic Probing" << '\n';
+        std::cout << std::setw(32) << std::left << "[Max cluster length]:"
+            << std::setw(20) << dht_copy.maxClusterLength()
+            << std::setw(20) << lpt_copy.maxClusterLength()
+            << std::setw(20) << qpt_copy.maxClusterLength() << '\n';
+        std::cout << std::setw(32) << std::left << "[Avg cluster length]:"
+            << std::setw(20) << dht_copy.avgClusterLength()
+            << std::setw(20) << lpt_copy.avgClusterLength()
+            << std::setw(20) << qpt_copy.avgClusterLength() << '\n';
     }
 
     // Hàm tính thời gian thực hiện các thao tác trên bảng băm
@@ -648,7 +648,7 @@ namespace BenchmarkUtils {
         return res;
     }
 
-	namespace printOutput {
+    namespace printOutput {
         void printTableSizes(double lf1, double lf2, int N1, int N2) {
             std::cout << "TABLE_SIZE with load factor 1 (" << lf1 << "): " << N1 << '\n';
             std::cout << "TABLE_SIZE with load factor 2 (" << lf2 << "): " << N2 << '\n';
@@ -765,59 +765,6 @@ namespace BenchmarkUtils {
                 << '\n';
             std::cout << std::string(120, '-') << '\n';
         }
-	}
-
-    // Hàm sinh search hit/miss indices với num_search mặc định = M, miss_rate nhập từ user
-    std::pair<std::vector<int>, std::vector<int>> generateSearchHitMissIndices(const int& M, const std::vector<int>& all_indices, const std::vector<std::pair<int, int>>& keyvals, const int& key_upper_bound) {
-        int num_search = M;
-        double miss_rate = -1;
-        while (miss_rate < 0 || miss_rate > 1) {
-            std::cout << "Enter the miss rate (0-1) for search operations: ";
-            std::cin >> miss_rate;
-            if (miss_rate < 0 || miss_rate > 1) {
-                std::cout << "Invalid rate! Please enter a value between 0 and 1.\n";
-            }
-        }
-
-        int num_miss = int(num_search * miss_rate + 0.5);
-        int num_hit = num_search - num_miss;
-
-        std::vector<int> hit_indices, miss_keys;
-
-        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-        std::uniform_int_distribution<int> dist_key(1, key_upper_bound);
-
-        // Chọn ngẫu nhiên num_hit chỉ số trong all_indices (truy cập key hợp lệ)
-        std::vector<int> indices = all_indices;
-        shuffle(indices.begin(), indices.end(), rng);
-        hit_indices.assign(indices.begin(), indices.begin() + num_hit);
-
-        // Lấy tập key đã tồn tại để sinh miss key không trùng
-        std::unordered_set<int> exist_keys;
-        for (const auto& kv : keyvals) exist_keys.insert(kv.first);
-
-        while ((int)miss_keys.size() < num_miss) {
-            int key = dist_key(rng);
-            if (exist_keys.count(key)) continue; // Đảm bảo miss
-            miss_keys.push_back(key);
-            exist_keys.insert(key); // Tránh trùng lặp miss
-        }
-
-        return { hit_indices, miss_keys };
-    }
-
-    std::pair<std::vector<int>, std::vector<int>> generateIndices(int M, int num_search, int num_delete) {
-        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-        std::vector<int> all_indices(M), search_indices, delete_indices;
-        helper::iota(all_indices.begin(), all_indices.end(), 0);
-
-        shuffle(all_indices.begin(), all_indices.end(), rng);
-        search_indices.assign(all_indices.begin(), all_indices.begin() + num_search);
-
-        shuffle(all_indices.begin(), all_indices.end(), rng);
-        delete_indices.assign(all_indices.begin(), all_indices.begin() + num_delete);
-
-        return { search_indices, delete_indices };
     }
 }
 
@@ -885,8 +832,8 @@ int main(void) {
         QuadraticHashTable<int, int> qpt1(N1), qpt2(N2);
 
         // Thống kê cluster
-        insertAndPrintClusterStats(dht1, lpt1, qpt1, keyvals, "After Insert with LF1");
-        insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
+        BenchmarkUtils::insertAndPrintClusterStats(dht1, lpt1, qpt1, keyvals, "After Insert with LF1");
+        BenchmarkUtils::insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
 
         // Đo hiệu năng
         auto dht1_stat = BenchmarkUtils::testTable(dht1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
