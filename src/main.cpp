@@ -2,6 +2,8 @@
 #include <vector>
 #include <random>
 #include <chrono>
+#include <fstream>
+#include <string>
 #include <iomanip>
 #include <sstream>
 #include <unordered_set>
@@ -134,6 +136,14 @@ namespace helper {
         return oss.str();
     }
 
+    // Ghi 1 dòng csv
+    void writeCSVRow(std::ofstream& fout, const std::vector<std::string>& cols) {
+        for (size_t i = 0; i < cols.size(); ++i) {
+            fout << cols[i];
+            if (i + 1 < cols.size()) fout << ",";
+        }
+        fout << "\n";
+    }
 }
 
 // ======= Double Hashing Table =======
@@ -1222,6 +1232,52 @@ namespace BenchmarkUtils {
         return res;
     }
 
+    void exportSummaryToCSV(const std::string& filename,
+        double lf1, double lf2,
+        const StatResult& dht1, const StatResult& dht2,
+        const StatResult& lpt1, const StatResult& lpt2,
+        const StatResult& qpt1, const StatResult& qpt2)
+    {
+        std::ofstream fout(filename, std::ios::app); // mở ở chế độ append
+        if (!fout) {
+            std::cerr << "ERROR: Cannot open output CSV!\n";
+            return;
+        }
+
+        // Nếu là lần đầu ghi, ghi header
+        static bool wroteHeader = false;
+        if (!wroteHeader) {
+            helper::writeCSVRow(fout, {
+                "LoadFactor", "Algorithm", "InsertTime(us)", "SearchTime(us)", "DeleteTime(us)",
+                "AvgProbeSearchHit", "AvgProbeSearchMiss", "AvgProbeInsertAfterDelete"
+                });
+            wroteHeader = true;
+        }
+
+        auto to_str = [](double v, int p = 2) {
+            std::ostringstream oss; oss << std::fixed << std::setprecision(p) << v; return oss.str();
+            };
+
+        // Ghi 6 hàng: 3 loại bảng, 2 load factor
+        helper::writeCSVRow(fout, { to_str(lf1), "Double Hashing", std::to_string(dht1.insertTime), std::to_string(dht1.searchTime), std::to_string(dht1.deleteTime),
+            to_str(dht1.avgProbeSearchHit), to_str(dht1.avgProbeSearchMiss), to_str(dht1.avgProbeInsertAfterDelete) });
+
+        helper::writeCSVRow(fout, { to_str(lf1), "Linear Probing", std::to_string(lpt1.insertTime), std::to_string(lpt1.searchTime), std::to_string(lpt1.deleteTime),
+            to_str(lpt1.avgProbeSearchHit), to_str(lpt1.avgProbeSearchMiss), to_str(lpt1.avgProbeInsertAfterDelete) });
+
+        helper::writeCSVRow(fout, { to_str(lf1), "Quadratic Probing", std::to_string(qpt1.insertTime), std::to_string(qpt1.searchTime), std::to_string(qpt1.deleteTime),
+            to_str(qpt1.avgProbeSearchHit), to_str(qpt1.avgProbeSearchMiss), to_str(qpt1.avgProbeInsertAfterDelete) });
+
+        helper::writeCSVRow(fout, { to_str(lf2), "Double Hashing", std::to_string(dht2.insertTime), std::to_string(dht2.searchTime), std::to_string(dht2.deleteTime),
+            to_str(dht2.avgProbeSearchHit), to_str(dht2.avgProbeSearchMiss), to_str(dht2.avgProbeInsertAfterDelete) });
+
+        helper::writeCSVRow(fout, { to_str(lf2), "Linear Probing", std::to_string(lpt2.insertTime), std::to_string(lpt2.searchTime), std::to_string(lpt2.deleteTime),
+            to_str(lpt2.avgProbeSearchHit), to_str(lpt2.avgProbeSearchMiss), to_str(lpt2.avgProbeInsertAfterDelete) });
+
+        helper::writeCSVRow(fout, { to_str(lf2), "Quadratic Probing", std::to_string(qpt2.insertTime), std::to_string(qpt2.searchTime), std::to_string(qpt2.deleteTime),
+            to_str(qpt2.avgProbeSearchHit), to_str(qpt2.avgProbeSearchMiss), to_str(qpt2.avgProbeInsertAfterDelete) });
+    }
+
     void runStaticBenchmark(int M, double lf1, double lf2, int N1, int N2, double missRate, int numDelete) {
         for (int datatype = 1; datatype <= 3; ++datatype) {
             std::string patternName;
@@ -1293,6 +1349,10 @@ namespace BenchmarkUtils {
             BenchmarkUtils::printOutput::printDetailStats("LinearProb-LF2", lf2, lpt2);
             BenchmarkUtils::printOutput::printDetailStats("QuadraticProb-LF2", lf2, qpt2);
             std::cout << "\n";
+
+			// Xuất kết quả ra CSV
+			BenchmarkUtils::exportSummaryToCSV("benchmark_results.csv", lf1, lf2,
+				dht1_stat, dht2_stat, lpt1_stat, lpt2_stat, qpt1_stat, qpt2_stat);
         }
     }
 
