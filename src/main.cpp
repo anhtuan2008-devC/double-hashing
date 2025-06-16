@@ -44,12 +44,14 @@ struct HashStats {
 namespace ClusterUtils {
     template<typename EntryType>
     static int maxClusterLength(const std::vector<EntryType>& table) {
-        int maxLen = 0, curLen = 0;
+        int maxLen = 0;
+        int curLen = 0;
         for (const auto& entry : table) {
             if (entry.state == OCCUPIED) {
                 ++curLen;
                 maxLen = std::max(maxLen, curLen);
-            } else {
+            } 
+            else {
                 curLen = 0;
             }
         }
@@ -62,7 +64,8 @@ namespace ClusterUtils {
         for (const auto& entry : table) {
             if (entry.state == OCCUPIED) {
                 ++curLen;
-            } else {
+            } 
+            else {
                 if (curLen > 0) {
                     ++totalClusters;
                     totalLen += curLen;
@@ -75,13 +78,20 @@ namespace ClusterUtils {
             ++totalClusters;
             totalLen += curLen;
         }
-        return totalClusters ? 1.0 * totalLen / totalClusters : 0;
+        if (totalClusters == 0)
+            return 0;
+        else
+            return (double)(totalLen) / totalClusters;
     }
 };
 
 namespace helper {
     template<typename T>
-    void shuffle(std::vector<T>& vec, std::mt19937& rng) {
+    void shuffle(std::vector<T>& vec) {
+        // Tạo random engine với seed theo thời gian
+        std::mt19937 rng((unsigned)(std::chrono::steady_clock::now().time_since_epoch().count()));
+
+        // Fisher–Yates shuffle
         for (int i = vec.size() - 1; i > 0; --i) {
             std::uniform_int_distribution<int> dist(0, i);
             int j = dist(rng);
@@ -106,6 +116,7 @@ namespace helper {
         }
         return true;
     }
+
     // Tìm số nguyên tố lớn hơn n
     int nextPrime(int n) {
         int x = n + 1;
@@ -113,6 +124,7 @@ namespace helper {
             ++x;
         return x;
     }
+
     // Chuyển từ double sang string với precision tùy chỉnh
     std::string doubleToStr(double x, int precision = 2) {
         std::ostringstream oss;
@@ -297,7 +309,8 @@ public:
             stats.totalProbesInsert += probes;
             stats.nInsert++;
             return true;
-        } else if (hashTable[probe].key == key) {
+        } 
+        else if (hashTable[probe].key == key) {
             hashTable[probe].value = value;
             return true;
         }
@@ -388,7 +401,8 @@ public:
                 stats.totalProbesInsert += probes;
                 stats.nInsert++;
                 return true;
-            } else if (hashTable[probe].key == key) {
+            } 
+            else if (hashTable[probe].key == key) {
                 hashTable[probe].value = value;
                 return true;
             }
@@ -985,175 +999,6 @@ namespace BenchmarkUtils {
             << std::setw(20) << qpt_copy.avgClusterLength() << '\n';
     }
 
-    // Hàm tính thời gian thực hiện các thao tác trên bảng băm
-    template <typename Table>
-    StatResult testTable(Table& table, const std::vector<std::pair<int, int>>& keyvals, const std::vector<int>& search_hit_indices, const std::vector<int>& search_miss_keys, const std::vector<int>& delete_indices) {
-        constexpr int NUM_RUNS = 3;
-        StatResult res;
-        long long totalInsertTime = 0, totalSearchHitTime = 0, totalSearchMissTime = 0, totalDeleteTime = 0;
-
-        // Thống kê probe cho từng loại search
-        long long totalProbeSearchHit = 0, totalProbeSearchMiss = 0;
-        long long totalProbeInsertAfterDelete = 0;
-        int nInsertAfterDelete = 0;
-
-        for (int run = 0; run < NUM_RUNS; ++run) {
-            Table tempTable(table); // clone
-
-            // Insert all keyvals
-            auto t1 = std::chrono::high_resolution_clock::now();
-            for (auto& kv : keyvals)
-                tempTable.insert(kv.first, kv.second);
-            auto t2 = std::chrono::high_resolution_clock::now();
-
-            // Search HIT (tồn tại)
-            int tmp;
-            auto t3 = std::chrono::high_resolution_clock::now();
-            for (int idx : search_hit_indices) {
-                int probes_before = tempTable.stats.totalProbesSearch;
-                tempTable.search(keyvals[idx].first, tmp);
-                totalProbeSearchHit += tempTable.stats.totalProbesSearch - probes_before;
-            }
-            auto t4 = std::chrono::high_resolution_clock::now();
-
-            // Search MISS (không tồn tại)
-            auto t5 = std::chrono::high_resolution_clock::now();
-            for (int key : search_miss_keys) {
-                int probes_before = tempTable.stats.totalProbesSearch;
-                tempTable.search(key, tmp);
-                totalProbeSearchMiss += tempTable.stats.totalProbesSearch - probes_before;
-            }
-            auto t6 = std::chrono::high_resolution_clock::now();
-
-            // Delete các key
-            auto t7 = std::chrono::high_resolution_clock::now();
-            for (int idx : delete_indices)
-                tempTable.erase(keyvals[idx].first);
-            auto t8 = std::chrono::high_resolution_clock::now();
-
-            // Insert lại các key vừa xóa (giá trị mới random)
-            std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-            std::uniform_int_distribution<int> dist_val(1, 1000000);
-            for (int idx : delete_indices) {
-                int probes_before = tempTable.stats.totalProbesInsert;
-                tempTable.insert(keyvals[idx].first, dist_val(rng));
-                totalProbeInsertAfterDelete += tempTable.stats.totalProbesInsert - probes_before;
-                nInsertAfterDelete++;
-            }
-
-            // Tính thời gian từng phần (chia nhỏ rõ ràng)
-            totalInsertTime += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-            totalSearchHitTime += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
-            totalSearchMissTime += std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5).count();
-            totalDeleteTime += std::chrono::duration_cast<std::chrono::microseconds>(t8 - t7).count();
-
-            // Ghi lại stats (1 lần duy nhất)
-            if (run == 0)
-                table.stats = tempTable.stats;
-        }
-
-        int nHit = search_hit_indices.size() * NUM_RUNS;
-        int nMiss = search_miss_keys.size() * NUM_RUNS;
-
-        res.insertTime = totalInsertTime / NUM_RUNS;
-        res.searchTime = (totalSearchHitTime + totalSearchMissTime) / NUM_RUNS;
-        res.deleteTime = totalDeleteTime / NUM_RUNS;
-        res.avgProbeSearchHit = (nHit ? 1.0 * totalProbeSearchHit / nHit : 0);
-        res.avgProbeSearchMiss = (nMiss ? 1.0 * totalProbeSearchMiss / nMiss : 0);
-        res.avgProbeInsertAfterDelete = (nInsertAfterDelete ? 1.0 * totalProbeInsertAfterDelete / nInsertAfterDelete : 0);
-
-        return res;
-    }
-
-    void runDynamicInsertExperiment(int M) {
-        std::cout << "\n=== DYNAMIC TABLE TEST: INSERT M ITEMS ===\n";
-
-        // In header bảng thống kê
-        std::cout << std::left
-            << std::setw(12) << "Pattern"
-            << std::setw(25) << "Algorithm"
-            << std::setw(15) << "InsertTime(us)"
-            << std::setw(12) << "TableSize"
-            << std::setw(12) << "LoadFactor"
-            << std::setw(20) << "MaxClusterLen"
-            << std::setw(20) << "AvgClusterLen" << '\n';
-        std::cout << std::string(116, '-') << '\n';
-
-        for (int pattern = 1; pattern <= 3; ++pattern) {
-            std::string patternName;
-            std::vector<std::pair<int, int>> keyvals;
-
-            if (pattern == 1) {
-                patternName = "RANDOM";
-                keyvals = BenchmarkUtils::generator::generateRandomKeyVals(M, M * 10);
-            }
-            else if (pattern == 2) {
-                patternName = "SEQUENTIAL";
-                keyvals = BenchmarkUtils::generator::generateSequentialKeyVals(M);
-            }
-            else {
-                patternName = "CLUSTERED";
-                keyvals = BenchmarkUtils::generator::generateClusteredKeyVals(M, M * 10);
-            }
-
-            // Dynamic Linear
-            DynamicLinearHashTable<int, int> dlt(17);
-            auto t1 = std::chrono::high_resolution_clock::now();
-            for (const auto& kv : keyvals)
-                dlt.insert(kv.first, kv.second);
-            auto t2 = std::chrono::high_resolution_clock::now();
-            long long time_dlt = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-
-            std::cout << std::left
-                << std::setw(12) << patternName
-                << std::setw(25) << "Dynamic Linear"
-                << std::setw(15) << time_dlt
-                << std::setw(12) << dlt.size()
-                << std::setw(12) << helper::doubleToStr(dlt.loadFactor(), 4)
-                << std::setw(20) << dlt.maxClusterLength()
-                << std::setw(20) << helper::doubleToStr(dlt.avgClusterLength(), 4)
-                << '\n';
-
-            // Dynamic Quadratic
-            DynamicQuadraticHashTable<int, int> dqt(17);
-            auto t3 = std::chrono::high_resolution_clock::now();
-            for (const auto& kv : keyvals)
-                dqt.insert(kv.first, kv.second);
-            auto t4 = std::chrono::high_resolution_clock::now();
-            long long time_dqt = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
-
-            std::cout << std::left
-                << std::setw(12) << patternName
-                << std::setw(25) << "Dynamic Quadratic"
-                << std::setw(15) << time_dqt
-                << std::setw(12) << dqt.size()
-                << std::setw(12) << helper::doubleToStr(dqt.loadFactor(), 4)
-                << std::setw(20) << dqt.maxClusterLength()
-                << std::setw(20) << helper::doubleToStr(dqt.avgClusterLength(), 4)
-                << '\n';
-
-            // Dynamic Double
-            DynamicDoubleHashTable<int, int> ddt(17);
-            auto t5 = std::chrono::high_resolution_clock::now();
-            for (const auto& kv : keyvals)
-                ddt.insert(kv.first, kv.second);
-            auto t6 = std::chrono::high_resolution_clock::now();
-            long long time_ddt = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5).count();
-
-            std::cout << std::left
-                << std::setw(12) << patternName
-                << std::setw(25) << "Dynamic Double"
-                << std::setw(15) << time_ddt
-                << std::setw(12) << ddt.size()
-                << std::setw(12) << helper::doubleToStr(ddt.loadFactor(), 4)
-                << std::setw(20) << ddt.maxClusterLength()
-                << std::setw(20) << helper::doubleToStr(ddt.avgClusterLength(), 4)
-                << '\n';
-        }
-
-        std::cout << "\n=== FINISHED DYNAMIC TABLE TEST ===\n";
-    }
-
     namespace printOutput {
         void printTableSizes(double lf1, double lf2, int N1, int N2) {
             std::cout << "TABLE_SIZE with load factor 1 (" << lf1 << "): " << N1 << '\n';
@@ -1272,6 +1117,249 @@ namespace BenchmarkUtils {
             std::cout << std::string(120, '-') << '\n';
         }
     }
+
+    // Hàm tính thời gian thực hiện các thao tác trên bảng băm
+    template <typename Table>
+    StatResult testTable(Table& table, const std::vector<std::pair<int, int>>& keyvals, const std::vector<int>& search_hit_indices, const std::vector<int>& search_miss_keys, const std::vector<int>& delete_indices) {
+        constexpr int NUM_RUNS = 3;
+        StatResult res;
+        long long totalInsertTime = 0, totalSearchHitTime = 0, totalSearchMissTime = 0, totalDeleteTime = 0;
+
+        // Thống kê probe cho từng loại search
+        long long totalProbeSearchHit = 0, totalProbeSearchMiss = 0;
+        long long totalProbeInsertAfterDelete = 0;
+        int nInsertAfterDelete = 0;
+
+        for (int run = 0; run < NUM_RUNS; ++run) {
+            Table tempTable(table); // clone
+
+            // Insert all keyvals
+            auto t1 = std::chrono::high_resolution_clock::now();
+            for (auto& kv : keyvals)
+                tempTable.insert(kv.first, kv.second);
+            auto t2 = std::chrono::high_resolution_clock::now();
+
+            // Search HIT (tồn tại)
+            int tmp;
+            auto t3 = std::chrono::high_resolution_clock::now();
+            for (int idx : search_hit_indices) {
+                int probes_before = tempTable.stats.totalProbesSearch;
+                tempTable.search(keyvals[idx].first, tmp);
+                totalProbeSearchHit += tempTable.stats.totalProbesSearch - probes_before;
+            }
+            auto t4 = std::chrono::high_resolution_clock::now();
+
+            // Search MISS (không tồn tại)
+            auto t5 = std::chrono::high_resolution_clock::now();
+            for (int key : search_miss_keys) {
+                int probes_before = tempTable.stats.totalProbesSearch;
+                tempTable.search(key, tmp);
+                totalProbeSearchMiss += tempTable.stats.totalProbesSearch - probes_before;
+            }
+            auto t6 = std::chrono::high_resolution_clock::now();
+
+            // Delete các key
+            auto t7 = std::chrono::high_resolution_clock::now();
+            for (int idx : delete_indices)
+                tempTable.erase(keyvals[idx].first);
+            auto t8 = std::chrono::high_resolution_clock::now();
+
+            // Insert lại các key vừa xóa (giá trị mới random)
+            std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+            std::uniform_int_distribution<int> dist_val(1, 1000000);
+            for (int idx : delete_indices) {
+                int probes_before = tempTable.stats.totalProbesInsert;
+                tempTable.insert(keyvals[idx].first, dist_val(rng));
+                totalProbeInsertAfterDelete += tempTable.stats.totalProbesInsert - probes_before;
+                nInsertAfterDelete++;
+            }
+
+            // Tính thời gian từng phần (chia nhỏ rõ ràng)
+            totalInsertTime += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+            totalSearchHitTime += std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
+            totalSearchMissTime += std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5).count();
+            totalDeleteTime += std::chrono::duration_cast<std::chrono::microseconds>(t8 - t7).count();
+
+            // Ghi lại stats (1 lần duy nhất)
+            if (run == 0)
+                table.stats = tempTable.stats;
+        }
+
+        int nHit = search_hit_indices.size() * NUM_RUNS;
+        int nMiss = search_miss_keys.size() * NUM_RUNS;
+
+        res.insertTime = totalInsertTime / NUM_RUNS;
+        res.searchTime = (totalSearchHitTime + totalSearchMissTime) / NUM_RUNS;
+        res.deleteTime = totalDeleteTime / NUM_RUNS;
+        res.avgProbeSearchHit = (nHit ? 1.0 * totalProbeSearchHit / nHit : 0);
+        res.avgProbeSearchMiss = (nMiss ? 1.0 * totalProbeSearchMiss / nMiss : 0);
+        res.avgProbeInsertAfterDelete = (nInsertAfterDelete ? 1.0 * totalProbeInsertAfterDelete / nInsertAfterDelete : 0);
+
+        return res;
+    }
+
+    void runStaticBenchmark(int M, double lf1, double lf2, int N1, int N2, double miss_rate, int num_delete) {
+        for (int datatype = 1; datatype <= 3; ++datatype) {
+            std::string patternName;
+            if (datatype == 1) patternName = "RANDOM";
+            else if (datatype == 2) patternName = "SEQUENTIAL";
+            else patternName = "CLUSTERED";
+
+            std::cout << "\n===============================\n";
+            std::cout << ">>> DATA PATTERN: " << patternName << "\n";
+
+            // Tạo key-value tương ứng
+            std::vector<std::pair<int, int>> keyvals;
+            if (datatype == 1)
+                keyvals = BenchmarkUtils::generator::generateRandomKeyVals(M, std::max(N1, N2) * 10);
+            else if (datatype == 2)
+                keyvals = BenchmarkUtils::generator::generateSequentialKeyVals(M);
+            else
+                keyvals = BenchmarkUtils::generator::generateClusteredKeyVals(M, std::max(N1, N2) * 10);
+
+            // Sinh chỉ số search hit/miss
+            std::vector<int> all_indices(M);
+            helper::iota(all_indices.begin(), all_indices.end(), 0);
+
+            int num_search = M;
+            int num_miss = int(num_search * miss_rate + 0.5);
+            int num_hit = num_search - num_miss;
+
+            // Hit indices
+            std::vector<int> indices = all_indices;
+            helper::shuffle(indices);
+            std::vector<int> search_hit_indices(indices.begin(), indices.begin() + num_hit);
+
+            // Miss keys
+            std::unordered_set<int> exist_keys;
+            for (const auto& kv : keyvals) exist_keys.insert(kv.first);
+            std::vector<int> search_miss_keys = BenchmarkUtils::generator::generateMissKeys(num_miss, exist_keys, std::max(N1, N2) * 10);
+
+            // Delete indices
+            std::vector<int> delete_indices = all_indices;
+            helper::shuffle(delete_indices);
+            delete_indices.resize(num_delete);
+
+            // Tạo bảng băm cho 2 cấu hình LF1 và LF2
+            DoubleHashTable<int, int> dht1(N1), dht2(N2);
+            LinearHashTable<int, int> lpt1(N1), lpt2(N2);
+            QuadraticHashTable<int, int> qpt1(N1), qpt2(N2);
+
+            // Thống kê cluster
+            BenchmarkUtils::insertAndPrintClusterStats(dht1, lpt1, qpt1, keyvals, "After Insert with LF1");
+            BenchmarkUtils::insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
+
+            // Đo hiệu năng
+            auto dht1_stat = BenchmarkUtils::testTable(dht1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+            auto dht2_stat = BenchmarkUtils::testTable(dht2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+            auto lpt1_stat = BenchmarkUtils::testTable(lpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+            auto lpt2_stat = BenchmarkUtils::testTable(lpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+            auto qpt1_stat = BenchmarkUtils::testTable(qpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+            auto qpt2_stat = BenchmarkUtils::testTable(qpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+
+            // In bảng thống kê hiệu năng
+            BenchmarkUtils::printOutput::printSummaryTable(lf1, lf2, dht1_stat, dht2_stat, lpt1_stat, lpt2_stat, qpt1_stat, qpt2_stat);
+
+            std::cout << "\n===== SUMMARY TABLE: PROBES, COLLISIONS, RATES =====\n";
+            BenchmarkUtils::printOutput::printDetailHeader();
+            BenchmarkUtils::printOutput::printDetailStats("DoubleHash-LF1", lf1, dht1);
+            BenchmarkUtils::printOutput::printDetailStats("LinearProb-LF1", lf1, lpt1);
+            BenchmarkUtils::printOutput::printDetailStats("QuadraticProb-LF1", lf1, qpt1);
+            BenchmarkUtils::printOutput::printDetailStats("DoubleHash-LF2", lf2, dht2);
+            BenchmarkUtils::printOutput::printDetailStats("LinearProb-LF2", lf2, lpt2);
+            BenchmarkUtils::printOutput::printDetailStats("QuadraticProb-LF2", lf2, qpt2);
+            std::cout << "\n";
+        }
+    }
+
+    void runDynamicInsertExperiment(int M) {
+        std::cout << "\n=== DYNAMIC TABLE TEST: INSERT M ITEMS ===\n";
+
+        // In header bảng thống kê
+        std::cout << std::left
+            << std::setw(12) << "Pattern"
+            << std::setw(25) << "Algorithm"
+            << std::setw(15) << "InsertTime(us)"
+            << std::setw(12) << "TableSize"
+            << std::setw(12) << "LoadFactor"
+            << std::setw(20) << "MaxClusterLen"
+            << std::setw(20) << "AvgClusterLen" << '\n';
+        std::cout << std::string(116, '-') << '\n';
+
+        for (int pattern = 1; pattern <= 3; ++pattern) {
+            std::string patternName;
+            std::vector<std::pair<int, int>> keyvals;
+
+            if (pattern == 1) {
+                patternName = "RANDOM";
+                keyvals = BenchmarkUtils::generator::generateRandomKeyVals(M, M * 10);
+            }
+            else if (pattern == 2) {
+                patternName = "SEQUENTIAL";
+                keyvals = BenchmarkUtils::generator::generateSequentialKeyVals(M);
+            }
+            else {
+                patternName = "CLUSTERED";
+                keyvals = BenchmarkUtils::generator::generateClusteredKeyVals(M, M * 10);
+            }
+
+            // Dynamic Linear
+            DynamicLinearHashTable<int, int> dlt(17);
+            auto t1 = std::chrono::high_resolution_clock::now();
+            for (const auto& kv : keyvals)
+                dlt.insert(kv.first, kv.second);
+            auto t2 = std::chrono::high_resolution_clock::now();
+            long long time_dlt = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+
+            std::cout << std::left
+                << std::setw(12) << patternName
+                << std::setw(25) << "Dynamic Linear"
+                << std::setw(15) << time_dlt
+                << std::setw(12) << dlt.size()
+                << std::setw(12) << helper::doubleToStr(dlt.loadFactor(), 4)
+                << std::setw(20) << dlt.maxClusterLength()
+                << std::setw(20) << helper::doubleToStr(dlt.avgClusterLength(), 4)
+                << '\n';
+
+            // Dynamic Quadratic
+            DynamicQuadraticHashTable<int, int> dqt(17);
+            auto t3 = std::chrono::high_resolution_clock::now();
+            for (const auto& kv : keyvals)
+                dqt.insert(kv.first, kv.second);
+            auto t4 = std::chrono::high_resolution_clock::now();
+            long long time_dqt = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
+
+            std::cout << std::left
+                << std::setw(12) << patternName
+                << std::setw(25) << "Dynamic Quadratic"
+                << std::setw(15) << time_dqt
+                << std::setw(12) << dqt.size()
+                << std::setw(12) << helper::doubleToStr(dqt.loadFactor(), 4)
+                << std::setw(20) << dqt.maxClusterLength()
+                << std::setw(20) << helper::doubleToStr(dqt.avgClusterLength(), 4)
+                << '\n';
+
+            // Dynamic Double
+            DynamicDoubleHashTable<int, int> ddt(17);
+            auto t5 = std::chrono::high_resolution_clock::now();
+            for (const auto& kv : keyvals)
+                ddt.insert(kv.first, kv.second);
+            auto t6 = std::chrono::high_resolution_clock::now();
+            long long time_ddt = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5).count();
+
+            std::cout << std::left
+                << std::setw(12) << patternName
+                << std::setw(25) << "Dynamic Double"
+                << std::setw(15) << time_ddt
+                << std::setw(12) << ddt.size()
+                << std::setw(12) << helper::doubleToStr(ddt.loadFactor(), 4)
+                << std::setw(20) << ddt.maxClusterLength()
+                << std::setw(20) << helper::doubleToStr(ddt.avgClusterLength(), 4)
+                << '\n';
+        }
+
+        std::cout << "\n=== FINISHED DYNAMIC TABLE TEST ===\n";
+    }
 }
 
 int main(void) {
@@ -1284,84 +1372,11 @@ int main(void) {
     int N2 = helper::nextPrime(int(M / lf2));
     BenchmarkUtils::printOutput::printTableSizes(lf1, lf2, N1, N2);
 
-    // Nhập miss rate và số delete chỉ 1 lần
 	double miss_rate = BenchmarkUtils::getInput::getMissRate(); 
 
     int num_delete = M;
 
-    // Lặp qua cả 3 kiểu dữ liệu
-    for (int datatype = 1; datatype <= 3; ++datatype) {
-        std::string patternName;
-        if (datatype == 1) patternName = "RANDOM";
-        else if (datatype == 2) patternName = "SEQUENTIAL";
-        else patternName = "CLUSTERED";
-
-        std::cout << "\n===============================\n";
-        std::cout << ">>> DATA PATTERN: " << patternName << "\n";
-
-        // Tạo key-value tương ứng
-        std::vector<std::pair<int, int>> keyvals;
-        if (datatype == 1)
-            keyvals = BenchmarkUtils::generator::generateRandomKeyVals(M, std::max(N1, N2) * 10);
-        else if (datatype == 2)
-            keyvals = BenchmarkUtils::generator::generateSequentialKeyVals(M);
-        else
-            keyvals = BenchmarkUtils::generator::generateClusteredKeyVals(M, std::max(N1, N2) * 10);
-
-        // Sinh chỉ số search hit/miss
-        std::vector<int> all_indices(M);
-        helper::iota(all_indices.begin(), all_indices.end(), 0);
-
-        int num_search = M;
-        int num_miss = int(num_search * miss_rate + 0.5);
-        int num_hit = num_search - num_miss;
-
-        // Hit indices
-        std::vector<int> indices = all_indices;
-        shuffle(indices.begin(), indices.end(), std::mt19937(std::chrono::steady_clock::now().time_since_epoch().count()));
-        std::vector<int> search_hit_indices(indices.begin(), indices.begin() + num_hit);
-
-        // Miss keys
-        std::unordered_set<int> exist_keys;
-        for (const auto& kv : keyvals) exist_keys.insert(kv.first);
-		std::vector<int> search_miss_keys = BenchmarkUtils::generator::generateMissKeys(num_miss, exist_keys, std::max(N1, N2) * 10);
-
-        // Delete indices
-        std::vector<int> delete_indices = all_indices;
-        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-        shuffle(delete_indices.begin(), delete_indices.end(), rng);
-        delete_indices.resize(num_delete);
-
-        // Tạo bảng băm cho 2 cấu hình LF1 và LF2
-        DoubleHashTable<int, int> dht1(N1), dht2(N2);
-        LinearHashTable<int, int> lpt1(N1), lpt2(N2);
-        QuadraticHashTable<int, int> qpt1(N1), qpt2(N2);
-
-        // Thống kê cluster
-        BenchmarkUtils::insertAndPrintClusterStats(dht1, lpt1, qpt1, keyvals, "After Insert with LF1");
-        BenchmarkUtils::insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
-
-        // Đo hiệu năng
-        auto dht1_stat = BenchmarkUtils::testTable(dht1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-        auto dht2_stat = BenchmarkUtils::testTable(dht2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-        auto lpt1_stat = BenchmarkUtils::testTable(lpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-        auto lpt2_stat = BenchmarkUtils::testTable(lpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-        auto qpt1_stat = BenchmarkUtils::testTable(qpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-        auto qpt2_stat = BenchmarkUtils::testTable(qpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-
-        // In bảng thống kê hiệu năng
-        BenchmarkUtils::printOutput::printSummaryTable(lf1, lf2, dht1_stat, dht2_stat, lpt1_stat, lpt2_stat, qpt1_stat, qpt2_stat);
-
-        std::cout << "\n===== SUMMARY TABLE: PROBES, COLLISIONS, RATES =====\n";
-        BenchmarkUtils::printOutput::printDetailHeader();
-        BenchmarkUtils::printOutput::printDetailStats("DoubleHash-LF1", lf1, dht1);
-        BenchmarkUtils::printOutput::printDetailStats("LinearProb-LF1", lf1, lpt1);
-        BenchmarkUtils::printOutput::printDetailStats("QuadraticProb-LF1", lf1, qpt1);
-        BenchmarkUtils::printOutput::printDetailStats("DoubleHash-LF2", lf2, dht2);
-        BenchmarkUtils::printOutput::printDetailStats("LinearProb-LF2", lf2, lpt2);
-        BenchmarkUtils::printOutput::printDetailStats("QuadraticProb-LF2", lf2, qpt2);
-        std::cout << "\n";
-    }
+    BenchmarkUtils::runStaticBenchmark(M, lf1, lf2, N1, N2, miss_rate, num_delete);
 
     std::cout << "\n=== FINISHED ALL DATA PATTERNS ===\n";
 
