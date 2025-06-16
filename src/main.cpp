@@ -86,19 +86,24 @@ namespace ClusterUtils {
 };
 
 namespace helper {
+
+    // rng dùng chung cho toàn namespace, tránh sinh cùng seed liên tục
+    inline std::mt19937& rng() {
+        static thread_local std::mt19937 eng(static_cast<unsigned>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        return eng;
+    }
+
+    // Fisher–Yates shuffle
     template<typename T>
     void shuffle(std::vector<T>& vec) {
-        // Tạo random engine với seed theo thời gian
-        std::mt19937 rng((unsigned)(std::chrono::steady_clock::now().time_since_epoch().count()));
-
-        // Fisher–Yates shuffle
         for (int i = vec.size() - 1; i > 0; --i) {
             std::uniform_int_distribution<int> dist(0, i);
-            int j = dist(rng);
+            int j = dist(rng());
             std::swap(vec[i], vec[j]);
         }
     }
 
+    // Hàm iota thủ công 
     template<typename Iterator, typename T>
     void iota(Iterator begin, Iterator end, T value) {
         while (begin != end) {
@@ -106,31 +111,29 @@ namespace helper {
         }
     }
 
-    // Hàm kiểm tra số nguyên tố
-    bool isPrime(int n) {
-        if (n < 2)
-            return false;
+    // Kiểm tra số nguyên tố (đủ tốt cho n < 1e6)
+    inline bool isPrime(int n) {
+        if (n < 2) return false;
         for (int i = 2; i * i <= n; ++i) {
-            if (n % i == 0)
-                return false;
+            if (n % i == 0) return false;
         }
         return true;
     }
 
     // Tìm số nguyên tố lớn hơn n
-    int nextPrime(int n) {
+    inline int nextPrime(int n) {
         int x = n + 1;
-        while (!isPrime(x))
-            ++x;
+        while (!isPrime(x)) ++x;
         return x;
     }
 
-    // Chuyển từ double sang string với precision tùy chỉnh
-    std::string doubleToStr(double x, int precision = 2) {
+    // Double to string với precision tuỳ chỉnh
+    inline std::string doubleToStr(double x, int precision = 2) {
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(precision) << x;
         return oss.str();
     }
+
 }
 
 // ======= Double Hashing Table =======
@@ -899,100 +902,121 @@ namespace BenchmarkUtils {
         }
 
         double getMissRate() {
-            double miss_rate;
+            double missRate;
             std::cout << "Enter the miss rate for search operations (0-1): ";
-            std::cin >> miss_rate;
-            while (miss_rate < 0 || miss_rate > 1) {
+            std::cin >> missRate;
+            while (missRate < 0 || missRate > 1) {
                 std::cout << "Invalid rate! Please enter a value between 0 and 1: ";
-                std::cin >> miss_rate;
+                std::cin >> missRate;
             }
-            return miss_rate;
+            return missRate;
         }
     }
 
     namespace generator {
-        std::vector<std::pair<int, int>> generateRandomKeyVals(int M, int key_upper, int val_upper = 1000000) {
-            std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-            std::uniform_int_distribution<int> dist_key(1, key_upper);
-            std::uniform_int_distribution<int> dist_val(1, val_upper);
+
+        // Hàm tiện ích tạo random engine, đảm bảo mỗi lần gọi đều random hóa
+        inline std::mt19937& rng() {
+            static thread_local std::mt19937 eng(std::chrono::steady_clock::now().time_since_epoch().count());
+            return eng;
+        }
+
+        // Sinh M cặp (key, value) ngẫu nhiên, key không trùng
+        // keyUpper: giá trị key lớn nhất có thể
+        // valUpper: giá trị value lớn nhất có thể
+        std::vector<std::pair<int, int>> generateRandomKeyVals(int M, int keyUpper, int valUpper = 1000000) {
+            std::uniform_int_distribution<int> distKey(1, keyUpper);
+            std::uniform_int_distribution<int> distVal(1, valUpper);
 
             std::unordered_set<int> used;
             std::vector<std::pair<int, int>> keyvals;
             while ((int)keyvals.size() < M) {
-                int key = dist_key(rng);
+                int key = distKey(rng());
                 if (used.count(key)) continue;
                 used.insert(key);
-                keyvals.emplace_back(key, dist_val(rng));
+                keyvals.emplace_back(key, distVal(rng()));
             }
             return keyvals;
         }
 
-        std::vector<std::pair<int, int>> generateSequentialKeyVals(int M, int val_upper = 1000000) {
-            std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-            std::uniform_int_distribution<int> dist_val(1, val_upper);
+        // Sinh M cặp (key, value) tuần tự từ 1 tới M, value ngẫu nhiên
+        std::vector<std::pair<int, int>> generateSequentialKeyVals(int M, int valUpper = 1000000) {
+            std::uniform_int_distribution<int> distVal(1, valUpper);
             std::vector<std::pair<int, int>> keyvals;
+            keyvals.reserve(M);
             for (int i = 1; i <= M; ++i)
-                keyvals.emplace_back(i, dist_val(rng));
+                keyvals.emplace_back(i, distVal(rng()));
             return keyvals;
         }
 
-        std::vector<std::pair<int, int>> generateClusteredKeyVals(int M, int key_upper, int val_upper = 1000000) {
-            std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-            std::uniform_int_distribution<int> dist_val(1, val_upper);
+        // Sinh M cặp (key, value) theo từng cụm liên tiếp, value ngẫu nhiên
+        std::vector<std::pair<int, int>> generateClusteredKeyVals(int M, int keyUpper, int valUpper = 1000000) {
+            std::uniform_int_distribution<int> distVal(1, valUpper);
 
-            int num_clusters = 5;
-            int per_cluster = M / num_clusters;
+            int numClusters = 5;
+            int perCluster = M / numClusters;
             std::vector<std::pair<int, int>> keyvals;
+            keyvals.reserve(M);
             int base = 1;
-            for (int c = 0; c < num_clusters; ++c) {
-                for (int i = 0; i < per_cluster && (int)keyvals.size() < M; ++i) {
-                    keyvals.emplace_back(base + i, dist_val(rng));
+            for (int c = 0; c < numClusters; ++c) {
+                for (int i = 0; i < perCluster && (int)keyvals.size() < M; ++i) {
+                    keyvals.emplace_back(base + i, distVal(rng()));
                 }
-                base += key_upper / num_clusters; // Nhảy cụm
+                base += keyUpper / numClusters;
             }
-            // Nếu chưa đủ, sinh thêm key lẻ cuối cùng
             while ((int)keyvals.size() < M) {
-                keyvals.emplace_back(base++, dist_val(rng));
+                keyvals.emplace_back(base++, distVal(rng()));
             }
             return keyvals;
         }
 
-        std::vector<int> generateMissKeys(int num_miss, const std::unordered_set<int>& exist_keys, int key_upper_bound) {
-            std::unordered_set<int> used = exist_keys; // copy để không làm thay đổi input gốc
-            std::vector<int> miss_keys;
-            std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-            std::uniform_int_distribution<int> dist_key(1, key_upper_bound);
+        // Sinh numMiss key chưa tồn tại trong existKeys
+        std::vector<int> generateMissKeys(int numMiss, const std::unordered_set<int>& existKeys, int keyUpperBound) {
+            std::unordered_set<int> used = existKeys; // copy
+            std::vector<int> missKeys;
+            std::uniform_int_distribution<int> distKey(1, keyUpperBound);
 
-            while ((int)miss_keys.size() < num_miss) {
-                int key = dist_key(rng);
+            while ((int)missKeys.size() < numMiss) {
+                int key = distKey(rng());
                 if (used.count(key)) continue;
-                miss_keys.push_back(key);
+                missKeys.push_back(key);
                 used.insert(key);
             }
-
-            return miss_keys;
+            return missKeys;
         }
     }
 
+    /// Insert toàn bộ cặp key-value vào 3 bảng băm (double, linear, quadratic), sau đó in thống kê độ dài cụm (cluster length).
     template<typename DHTable, typename LTable, typename QTable>
-    void insertAndPrintClusterStats(const DHTable& dht, const LTable& lpt, const QTable& qpt, const std::vector<std::pair<int, int>>& keyvals, const std::string& label = "") {
+    void insertAndPrintClusterStats(const DHTable& dht, const LTable& lpt, const QTable& qpt,
+        const std::vector<std::pair<int, int>>& keyvals,
+        const std::string& label = "")
+    {
+        // Copy bảng gốc để giữ nguyên trạng thái ngoài
         DHTable dht_copy = dht;
         LTable lpt_copy = lpt;
         QTable qpt_copy = qpt;
-        for (auto& kv : keyvals) {
-            dht_copy.insert(kv.first, kv.second);
-            lpt_copy.insert(kv.first, kv.second);
-            qpt_copy.insert(kv.first, kv.second);
+
+        // Insert dữ liệu vào các bản sao
+        for (const auto& [key, value] : keyvals) {
+            dht_copy.insert(key, value);
+            lpt_copy.insert(key, value);
+            qpt_copy.insert(key, value);
         }
-        std::cout << "\n===== CLUSTER LENGTH STATISTICS" << (label.empty() ? "" : (" - " + label)) << " =====\n";
+
+        // In thống kê cluster length
+        std::cout << "\n===== CLUSTER LENGTH STATISTICS"
+            << (label.empty() ? "" : (" - " + label)) << " =====\n";
         std::cout << std::setw(32) << std::left << " "
             << std::setw(20) << "Double Hashing"
             << std::setw(20) << "Linear Probing"
             << std::setw(20) << "Quadratic Probing" << '\n';
+
         std::cout << std::setw(32) << std::left << "[Max cluster length]:"
             << std::setw(20) << dht_copy.maxClusterLength()
             << std::setw(20) << lpt_copy.maxClusterLength()
             << std::setw(20) << qpt_copy.maxClusterLength() << '\n';
+
         std::cout << std::setw(32) << std::left << "[Avg cluster length]:"
             << std::setw(20) << dht_copy.avgClusterLength()
             << std::setw(20) << lpt_copy.avgClusterLength()
@@ -1120,8 +1144,8 @@ namespace BenchmarkUtils {
 
     // Hàm tính thời gian thực hiện các thao tác trên bảng băm
     template <typename Table>
-    StatResult testTable(Table& table, const std::vector<std::pair<int, int>>& keyvals, const std::vector<int>& search_hit_indices, const std::vector<int>& search_miss_keys, const std::vector<int>& delete_indices) {
-        constexpr int NUM_RUNS = 3;
+    StatResult testTable(Table& table, const std::vector<std::pair<int, int>>& keyvals, const std::vector<int>& search_hit_indices, const std::vector<int>& search_missKeys, const std::vector<int>& delete_indices) {
+        const int NUM_RUNS = 3;
         StatResult res;
         long long totalInsertTime = 0, totalSearchHitTime = 0, totalSearchMissTime = 0, totalDeleteTime = 0;
 
@@ -1151,7 +1175,7 @@ namespace BenchmarkUtils {
 
             // Search MISS (không tồn tại)
             auto t5 = std::chrono::high_resolution_clock::now();
-            for (int key : search_miss_keys) {
+            for (int key : search_missKeys) {
                 int probes_before = tempTable.stats.totalProbesSearch;
                 tempTable.search(key, tmp);
                 totalProbeSearchMiss += tempTable.stats.totalProbesSearch - probes_before;
@@ -1166,10 +1190,10 @@ namespace BenchmarkUtils {
 
             // Insert lại các key vừa xóa (giá trị mới random)
             std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-            std::uniform_int_distribution<int> dist_val(1, 1000000);
+            std::uniform_int_distribution<int> distVal(1, 1000000);
             for (int idx : delete_indices) {
                 int probes_before = tempTable.stats.totalProbesInsert;
-                tempTable.insert(keyvals[idx].first, dist_val(rng));
+                tempTable.insert(keyvals[idx].first, distVal(rng));
                 totalProbeInsertAfterDelete += tempTable.stats.totalProbesInsert - probes_before;
                 nInsertAfterDelete++;
             }
@@ -1186,7 +1210,7 @@ namespace BenchmarkUtils {
         }
 
         int nHit = search_hit_indices.size() * NUM_RUNS;
-        int nMiss = search_miss_keys.size() * NUM_RUNS;
+        int nMiss = search_missKeys.size() * NUM_RUNS;
 
         res.insertTime = totalInsertTime / NUM_RUNS;
         res.searchTime = (totalSearchHitTime + totalSearchMissTime) / NUM_RUNS;
@@ -1198,7 +1222,7 @@ namespace BenchmarkUtils {
         return res;
     }
 
-    void runStaticBenchmark(int M, double lf1, double lf2, int N1, int N2, double miss_rate, int num_delete) {
+    void runStaticBenchmark(int M, double lf1, double lf2, int N1, int N2, double missRate, int numDelete) {
         for (int datatype = 1; datatype <= 3; ++datatype) {
             std::string patternName;
             if (datatype == 1) patternName = "RANDOM";
@@ -1222,8 +1246,8 @@ namespace BenchmarkUtils {
             helper::iota(all_indices.begin(), all_indices.end(), 0);
 
             int num_search = M;
-            int num_miss = int(num_search * miss_rate + 0.5);
-            int num_hit = num_search - num_miss;
+            int numMiss = int(num_search * missRate + 0.5);
+            int num_hit = num_search - numMiss;
 
             // Hit indices
             std::vector<int> indices = all_indices;
@@ -1231,14 +1255,14 @@ namespace BenchmarkUtils {
             std::vector<int> search_hit_indices(indices.begin(), indices.begin() + num_hit);
 
             // Miss keys
-            std::unordered_set<int> exist_keys;
-            for (const auto& kv : keyvals) exist_keys.insert(kv.first);
-            std::vector<int> search_miss_keys = BenchmarkUtils::generator::generateMissKeys(num_miss, exist_keys, std::max(N1, N2) * 10);
+            std::unordered_set<int> existKeys;
+            for (const auto& kv : keyvals) existKeys.insert(kv.first);
+            std::vector<int> search_missKeys = BenchmarkUtils::generator::generateMissKeys(numMiss, existKeys, std::max(N1, N2) * 10);
 
             // Delete indices
             std::vector<int> delete_indices = all_indices;
             helper::shuffle(delete_indices);
-            delete_indices.resize(num_delete);
+            delete_indices.resize(numDelete);
 
             // Tạo bảng băm cho 2 cấu hình LF1 và LF2
             DoubleHashTable<int, int> dht1(N1), dht2(N2);
@@ -1250,12 +1274,12 @@ namespace BenchmarkUtils {
             BenchmarkUtils::insertAndPrintClusterStats(dht2, lpt2, qpt2, keyvals, "After Insert with LF2");
 
             // Đo hiệu năng
-            auto dht1_stat = BenchmarkUtils::testTable(dht1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-            auto dht2_stat = BenchmarkUtils::testTable(dht2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-            auto lpt1_stat = BenchmarkUtils::testTable(lpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-            auto lpt2_stat = BenchmarkUtils::testTable(lpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-            auto qpt1_stat = BenchmarkUtils::testTable(qpt1, keyvals, search_hit_indices, search_miss_keys, delete_indices);
-            auto qpt2_stat = BenchmarkUtils::testTable(qpt2, keyvals, search_hit_indices, search_miss_keys, delete_indices);
+            auto dht1_stat = BenchmarkUtils::testTable(dht1, keyvals, search_hit_indices, search_missKeys, delete_indices);
+            auto dht2_stat = BenchmarkUtils::testTable(dht2, keyvals, search_hit_indices, search_missKeys, delete_indices);
+            auto lpt1_stat = BenchmarkUtils::testTable(lpt1, keyvals, search_hit_indices, search_missKeys, delete_indices);
+            auto lpt2_stat = BenchmarkUtils::testTable(lpt2, keyvals, search_hit_indices, search_missKeys, delete_indices);
+            auto qpt1_stat = BenchmarkUtils::testTable(qpt1, keyvals, search_hit_indices, search_missKeys, delete_indices);
+            auto qpt2_stat = BenchmarkUtils::testTable(qpt2, keyvals, search_hit_indices, search_missKeys, delete_indices);
 
             // In bảng thống kê hiệu năng
             BenchmarkUtils::printOutput::printSummaryTable(lf1, lf2, dht1_stat, dht2_stat, lpt1_stat, lpt2_stat, qpt1_stat, qpt2_stat);
@@ -1363,25 +1387,24 @@ namespace BenchmarkUtils {
 }
 
 int main(void) {
-    // Nhập đầu vào chung
+    // Bước 1: Lấy đầu vào từ người dùng
     int M = BenchmarkUtils::getInput::getTestSize();
     double lf1 = BenchmarkUtils::getInput::getUserLoadFactor();
     double lf2 = 0.5; // tự động chọn
+    double missRate = BenchmarkUtils::getInput::getMissRate();
+    int numDelete = M;
 
+    // Bước 2: Tính kích thước bảng băm cần thiết cho 2 mức load factor
     int N1 = helper::nextPrime(int(M / lf1));
     int N2 = helper::nextPrime(int(M / lf2));
     BenchmarkUtils::printOutput::printTableSizes(lf1, lf2, N1, N2);
 
-	double miss_rate = BenchmarkUtils::getInput::getMissRate(); 
-
-    int num_delete = M;
-
-    BenchmarkUtils::runStaticBenchmark(M, lf1, lf2, N1, N2, miss_rate, num_delete);
-
+    // Bước 3: Chạy benchmark cho bảng băm cố định
+    BenchmarkUtils::runStaticBenchmark(M, lf1, lf2, N1, N2, missRate, numDelete);
     std::cout << "\n=== FINISHED ALL DATA PATTERNS ===\n";
 
+    // Bước 4: Chạy benchmark cho bảng băm động
     BenchmarkUtils::runDynamicInsertExperiment(M);
-
 	std::cout << "\n=== FINISHED DYNAMIC INSERT EXPERIMENT ===\n";
 
     return 0;
